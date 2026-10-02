@@ -16,8 +16,8 @@ import tempfile
 import threading
 from pathlib import Path
 
-from .base import CREATE_NEW_CONSOLE, CREATE_NO_WINDOW, Provider, RawResult, classify_error, child_env, find_posix, \
-    find_windows_exe, http_ok, in_terminal, run_installer
+from .base import CREATE_NEW_CONSOLE, CREATE_NO_WINDOW, RUN_TIMEOUT, Deadline, Provider, RawResult, classify_error, \
+    child_env, find_posix, find_windows_exe, http_ok, in_terminal, run_installer
 
 INSTALL_CMD = "irm https://chatgpt.com/codex/install.ps1 | iex"
 INSTALL_CMD_MAC = "curl -fsSL https://chatgpt.com/codex/install.sh | sh"
@@ -281,26 +281,30 @@ class CodexBackend:
             self._proc.kill()
 
     def _exec(self, cmd: list[str], stdin_text: str, cwd: str, api_key: str | None,
-              timeout: int | None = None) -> RawResult:
+              timeout: int = RUN_TIMEOUT, question: bool = False) -> RawResult:
         try:
             self._proc = p = subprocess.Popen(cmd, cwd=cwd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                               stderr=subprocess.PIPE, env=env(api_key), creationflags=CREATE_NO_WINDOW)
         except OSError as e:
             return RawResult(error=f"launch_failed: {e}")
+        if question and self.brain.cancelled:
+            p.kill()                 # Stop was pressed while it started
         # Codex logs to stderr while it works: drain it so a full pipe never stalls the run
         err: list[bytes] = []
         reader = threading.Thread(target=lambda: err.append(p.stderr.read()), daemon=True)
         reader.start()
-        killer = threading.Timer(timeout, p.kill) if timeout else None
-        if killer:
-            killer.start()
-        p.stdin.write(stdin_text.encode("utf-8"))
-        p.stdin.close()
+        deadline = Deadline(p, timeout)
+        try:
+            p.stdin.write(stdin_text.encode("utf-8"))
+            p.stdin.close()
+        except OSError:
+            pass                     # Codex already exited (killed, a bad flag): its output says why
         lines = list(p.stdout)
         p.wait()
-        if killer:
-            killer.cancel()
+        deadline.cancel()
         reader.join(timeout=5)
+        if deadline.expired:
+            return RawResult(error="timeout")
         return parse_events(lines, b"".join(err).decode("utf-8", errors="replace"))
 
     def run(self, prompt: str, screenshot_jpeg: bytes | None, on_raw_delta=None) -> RawResult:
@@ -312,7 +316,7 @@ class CodexBackend:
                 with os.fdopen(fd, "wb") as f:
                     f.write(screenshot_jpeg)
             cmd = codex_command(self.exe, b.kb.root, b.system_prompt() + TOOLS_NOTE, b.model, image)
-            r = self._exec(cmd, prompt, str(b.kb.root), b.api_key)
+            r = self._exec(cmd, prompt, str(b.kb.root), b.api_key, timeout=RUN_TIMEOUT, question=True)
         finally:
             if image:
                 try:

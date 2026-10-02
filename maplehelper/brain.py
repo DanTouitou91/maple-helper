@@ -7,7 +7,6 @@ the provider's backend only runs the CLI and returns the raw text.
 from __future__ import annotations
 
 import json
-import logging
 import re
 from dataclasses import dataclass, field
 
@@ -15,7 +14,6 @@ from . import providers
 from .kb import KnowledgeBase
 from .store import Character, History
 
-log = logging.getLogger(__name__)
 
 META = "@@META@@"
 REVERSE_WORDS = re.compile(r"(מאיז[הו]|מאילו|איזה|אילו)\s+מפלצ|מי\s+מפיל|which\s+monsters?|who\s+drops|what\s+drops", re.I)
@@ -103,6 +101,8 @@ def build_prompt(question: str, character: Character | None, history: History | 
         if summ:
             parts.append("<earlier_sessions>\n" + "\n".join(summ[-3:]) + "\n</earlier_sessions>")
         recent = history.recent()
+        if recent and recent[-1].get("role") == "user" and str(recent[-1].get("text", "")).endswith(question):
+            recent = recent[:-1]     # the chat logs the question before asking: it comes once, in <question>
         if recent:
             convo = "\n".join(f"{'Player' if r['role'] == 'user' else 'Helper'}: {r['text'][:600]}" for r in recent)
             parts.append(f"<recent_conversation>\n{convo}\n</recent_conversation>")
@@ -133,6 +133,8 @@ def build_prompt(question: str, character: Character | None, history: History | 
                              + ", ".join(f"{kb.get(i)['name']} [{i}]" for i in g["items"]))
             ctx.append("\n".join(lines))
     for key in kb.find_mentions(question, max_results=4):
+        if key in tagged:
+            continue                 # already in <selected>
         body = kb.page_body(key, limit=2500)
         if body:
             ctx.append(f"[{key}]\n{body}")
@@ -194,6 +196,7 @@ class Brain:
         self.model = model
         self.length = length
         self.api_key = api_key
+        self.cancelled = False         # the player pressed Stop on the question being answered
         self._provider = providers.get(provider)
         self.backend = self._provider.backend(self)
 
@@ -223,6 +226,9 @@ class Brain:
         return self.backend.exe is not None
 
     def cancel(self) -> None:
+        """Stop the question being answered (from any thread): its process is killed and ask() returns
+        Answer(error="cancelled")."""
+        self.cancelled = True
         self.backend.cancel()
 
     def ask(self, question: str, character: Character | None, history: History | None,
@@ -230,10 +236,13 @@ class Brain:
         """Blocking call; on_delta(visible_text_so_far) is invoked while the answer streams."""
         if not self.backend.exe:
             return Answer(error="not_installed")
+        self.cancelled = False
         self.kb.ensure_drop_table()
         prompt = build_prompt(question, character, history, self.kb, screenshot_jpeg is not None, self.length, focus)
         raw_delta = (lambda raw: on_delta(raw.split(META)[0].strip())) if on_delta else None
         result = self.backend.run(prompt, screenshot_jpeg, raw_delta)
+        if self.cancelled:
+            return Answer(error="cancelled", limits=result.limits)
         if result.error:
             return Answer(error=result.error, limits=result.limits)
         text, meta = split_meta(result.text)
@@ -279,18 +288,6 @@ class Brain:
         if not transcript.strip():
             return None
         return self.backend.summarize(SUMMARY_PROMPT, transcript)
-
-    def summarize_guide(self, key: str, page: str, lang: str) -> str | None:
-        """The practical takeaways of a KB guide in the player's language (a light model, one short call)."""
-        language = "Hebrew" if lang == "he" else "English"
-        prompt = (f"Summarize this MapleStory Classic guide for a player, in {language}: 6-10 short bullet lines "
-                  "('• ...') with the most useful practical advice (builds, levels, where to go, what to buy). "
-                  "Keep every game name (items, monsters, maps, skills, jobs) in English exactly as written. "
-                  "No intro, no outro.")
-        out = self.backend.summarize(prompt, page[:60000], timeout=120)
-        if not out:
-            log.warning("guide summary failed for %s", key)
-        return out
 
 
 _LEVEL_PATTERNS = [

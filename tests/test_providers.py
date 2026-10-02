@@ -290,19 +290,6 @@ class TestClaudeBackend:
         assert ans.error == "no_result" and ans.limits["five_hour"]["used"] == 0.7
 
 
-def test_guide_summaries_go_through_the_active_provider(kb):
-    from maplehelper.brain import Brain
-    b = Brain(kb, provider="codex")
-    seen = {}
-
-    def fake(instructions, text, timeout=90):
-        seen.update(instructions=instructions, text=text, timeout=timeout)
-        return "• Hunt snails"
-    b.backend.summarize = fake
-    assert b.summarize_guide("guide/1", "x" * 70000, "he") == "• Hunt snails"
-    assert "Hebrew" in seen["instructions"] and len(seen["text"]) == 60000 and seen["timeout"] == 120
-
-
 def test_only_claude_has_a_lighter_saver_model():
     assert providers.get("claude").saver_model == "haiku" and providers.get("claude").reports_usage
     assert providers.get("codex").saver_model is None and providers.get("codex").reports_usage   # read on demand

@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QScrollArea, QVB
 from .. import bidi
 from ..i18n import I18n
 from ..kb import KnowledgeBase
+from . import theme
 from .controls import rtl_buttons
 from .glass import GlassDialog
 from .widgets import EntityCard
@@ -18,7 +19,7 @@ class WishlistDialog(GlassDialog):
     def __init__(self, keys: list[str], kb: KnowledgeBase, lang: str, stylesheet: str):
         self.t = t = I18n(lang or "he")
         super().__init__(t("wishlist"), t.rtl)
-        self.setStyleSheet(stylesheet)
+        theme.apply(self, stylesheet)
         self.resize(500, 640)
         rtl = t.rtl
         outer = QVBoxLayout(self.content)

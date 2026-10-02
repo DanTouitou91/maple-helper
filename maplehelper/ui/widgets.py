@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QSizePol
 
 from .. import bidi
 from ..kb import KnowledgeBase
+from . import theme
 
 
 def _label(text: str = "", name: str | None = None, rich: bool = False, wrap: bool = True) -> QLabel:
@@ -39,17 +40,21 @@ class Bubble(QFrame):
         lay.addWidget(self.label)
         self.set_text(text)
 
-    def set_text(self, text: str) -> None:
+    def set_text(self, text: str, explain: bool = True) -> None:
+        """explain: the "?" beside game terms (off while an answer streams: annotated once, when done)."""
+        if (text, explain) == getattr(self, "_shown", None):
+            return              # a streaming answer repeats itself while its hidden META tail arrives
+        self._shown = (text, explain)
         if not text:
             self.label.setText("")
             return
         body = bidi.to_html(text)
-        if self.role != "user":
+        if self.role != "user" and explain:
             from . import terms
             from .. import glossary
             body = glossary.annotate(body, terms.LANG, limit=4)
             if not getattr(self, "_terms", False):
-                terms.watch(self.label, terms.LANG)
+                terms.watch(self.label)
                 self._terms = True
         self.label.setText(body)
 
@@ -231,9 +236,11 @@ class Selectable:
         SELECTION.changed.connect(self._on_selection)
 
     def _on_selection(self, keys: list):
-        self.setProperty("selected", "true" if self.key in keys else "false")
-        self.style().unpolish(self)
-        self.style().polish(self)
+        on = "true" if self.key in keys else "false"
+        if (self.property("selected") or "false") != on:     # every card hears every change: restyle only this one
+            self.setProperty("selected", on)
+            self.style().unpolish(self)
+            self.style().polish(self)
 
     def mouseReleaseEvent(self, ev):
         if ev.button() == Qt.LeftButton:
@@ -260,10 +267,7 @@ class EntityCard(Selectable, QFrame):
         pic.setFixedSize(56, 56)
         pic.setAlignment(Qt.AlignCenter)
         img = kb.picture(key)          # never empty: own picture, related one, or category icon
-        if img:
-            pm = QPixmap(str(img))
-            if not pm.isNull():
-                pic.setPixmap(pm.scaled(56, 56, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        pic.setPixmap(theme.thumb(img, 56))
         row.addWidget(pic, 0, Qt.AlignTop)
 
         col = QVBoxLayout()
@@ -292,7 +296,6 @@ class EntityCard(Selectable, QFrame):
         col.addWidget(credit)
         row.addLayout(col, 1)
         from PySide6.QtWidgets import QToolButton
-        from . import theme
         from ..i18n import I18n
         self._t = I18n(lang)
         self._buttons = QWidget()
@@ -323,6 +326,8 @@ class EntityCard(Selectable, QFrame):
     def _refresh_star(self):
         from . import theme
         on = WISHLIST.has(self.key)
+        if self._star.property("wished") == ("true" if on else "false"):
+            return
         self._star.setText(theme.ICON["star_on" if on else "star"])
         self._star.setProperty("wished", "true" if on else "false")
         self._star.style().unpolish(self._star)
@@ -379,10 +384,12 @@ class Avatar(QLabel):
         super().__init__()
         self.setFixedSize(size, size)
         self._pm = None
+        self._scaled = (None, None)        # (size, dpr) it was scaled for, the scaled picture
 
     def set_image(self, path) -> None:
         pm = QPixmap(str(path)) if path else QPixmap()
         self._pm = None if pm.isNull() else pm
+        self._scaled = (None, None)
         self.update()
 
     def paintEvent(self, e):
@@ -396,8 +403,11 @@ class Avatar(QLabel):
         p.fillPath(path, QColor(255, 255, 255, 26) if theme.MODE == "dark" else QColor(0, 0, 0, 10))
         if self._pm:
             dpr = self.devicePixelRatioF()
-            pm = self._pm.scaled(self.size() * dpr, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            pm.setDevicePixelRatio(dpr)
+            if self._scaled[0] != (self.size(), dpr):          # a smooth scale on every repaint was the cost
+                pm = self._pm.scaled(self.size() * dpr, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                pm.setDevicePixelRatio(dpr)
+                self._scaled = ((self.size(), dpr), pm)
+            pm = self._scaled[1]
             w, h = pm.width() / dpr, pm.height() / dpr
             p.drawPixmap(int((self.width() - w) / 2), int((self.height() - h) / 2), pm)
 
@@ -541,11 +551,7 @@ class EntityTile(Selectable, QFrame):
         pic = QLabel()
         pic.setFixedSize(32, 32)
         pic.setAlignment(Qt.AlignCenter)
-        img = kb.picture(key)
-        if img:
-            pm = QPixmap(str(img))
-            if not pm.isNull():
-                pic.setPixmap(pm.scaled(32, 32, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        pic.setPixmap(theme.thumb(kb.picture(key), 32))
         row.addWidget(pic)
         name = QLabel(e.get("name", key), objectName="TileName")
         name.setWordWrap(True)
@@ -601,11 +607,7 @@ class DropGroupCard(QFrame):
         pic = QLabel()
         pic.setFixedSize(40, 40)
         pic.setAlignment(Qt.AlignCenter)
-        img = kb.picture(monster)
-        if img:
-            pm = QPixmap(str(img))
-            if not pm.isNull():
-                pic.setPixmap(pm.scaled(40, 40, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        pic.setPixmap(theme.thumb(kb.picture(monster), 40))
         head.addWidget(pic)
         align = (Qt.AlignRight if rtl else Qt.AlignLeft) | Qt.AlignAbsolute | Qt.AlignVCenter
         col = QVBoxLayout()

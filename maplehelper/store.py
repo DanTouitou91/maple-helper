@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import sys
 import time
 import uuid
@@ -34,10 +35,9 @@ def _data_root() -> Path:
 DATA_DIR = _data_root() / "MapleHelper"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 USER_KB = DATA_DIR / "kb"            # knowledge base updates downloaded at runtime
-SHOTS_DIR = DATA_DIR / "shots"       # screenshots live only until the answer arrives
 HISTORY_DIR = DATA_DIR / "history"
 AVATAR_DIR = DATA_DIR / "avatars"
-for d in (SHOTS_DIR, HISTORY_DIR, AVATAR_DIR):
+for d in (HISTORY_DIR, AVATAR_DIR):
     d.mkdir(parents=True, exist_ok=True)
 
 
@@ -51,13 +51,33 @@ def kb_dir() -> Path:
 def _read_json(path: Path, default):
     try:
         return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+    except OSError:
+        return default
+    except ValueError:
+        pass
+    # torn by a crash or power loss: set it aside (the next save must not make the loss permanent)
+    # and fall back to the previous good version
+    try:
+        path.replace(path.with_name(path.name + ".corrupt"))
+    except OSError:
+        pass
+    try:
+        return json.loads(path.with_name(path.name + ".bak").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
         return default
 
 
 def _write_json(path: Path, data) -> None:
+    """Atomic and on disk before the swap; the previous version stays as <name>.bak."""
     tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+    with tmp.open("w", encoding="utf-8") as f:
+        f.write(json.dumps(data, ensure_ascii=False, indent=1))
+        f.flush()
+        os.fsync(f.fileno())
+    try:
+        shutil.copyfile(path, path.with_name(path.name + ".bak"))
+    except OSError:
+        pass                     # first save
     tmp.replace(path)
 
 
@@ -287,7 +307,7 @@ class Profiles:
 class History:
     """Per-character conversation log (jsonl) plus rolling session summaries."""
 
-    RECENT = 20
+    RECENT = 8       # messages the prompt carries; older context lives in the session summaries
 
     def __init__(self, character_id: str):
         self.log = HISTORY_DIR / f"{character_id}.jsonl"
@@ -319,5 +339,5 @@ class History:
         _write_json(self.summaries_path, s[-10:])
 
     def clear(self) -> None:
-        for p in (self.log, self.summaries_path):
+        for p in (self.log, self.summaries_path, self.summaries_path.with_name(self.summaries_path.name + ".bak")):
             p.unlink(missing_ok=True)

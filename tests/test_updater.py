@@ -66,34 +66,34 @@ def test_same_or_older_version_is_skipped(env, version):
 def test_hash_mismatch_is_rejected(env):
     user_kb, _, publish = env
     publish(sha="0" * 64)
-    assert updater.update_kb() is False and still_old(user_kb)
+    assert updater.update_kb() is None and still_old(user_kb)
 
 
 def test_zip_without_index_is_rejected(env):
     user_kb, _, publish = env
     publish(data=make_zip({"meta.json": "{}"}))
-    assert updater.update_kb() is False and still_old(user_kb)
+    assert updater.update_kb() is None and still_old(user_kb)
     assert not user_kb.with_name("kb.new").exists()
 
 
 def test_corrupt_zip_with_matching_hash_is_rejected(env):
     user_kb, _, publish = env
     publish(data=b"this is not a zip")
-    assert updater.update_kb() is False and still_old(user_kb)
+    assert updater.update_kb() is None and still_old(user_kb)
 
 
 @pytest.mark.parametrize("manifest", [None, b"{not json", b"[]", b'{"version": "2099.01.01"}'])
 def test_offline_or_bad_manifest(env, manifest):
     user_kb, net, _ = env
     net[MANIFEST] = manifest
-    assert updater.update_kb() is False and still_old(user_kb)
+    assert updater.update_kb() is None and still_old(user_kb)      # failed, not "up to date"
 
 
 def test_download_failure(env):
     user_kb, net, publish = env
     publish()
     net[ZIP_URL] = None
-    assert updater.update_kb() is False and still_old(user_kb)
+    assert updater.update_kb() is None and still_old(user_kb)
 
 
 def test_manifest_url_uses_latest_release():
@@ -121,6 +121,14 @@ def app_env(tmp_path, monkeypatch):
     net: dict[str, bytes | None] = {}
     monkeypatch.setattr(updater, "_get", lambda url, timeout=30: net.get(url))
 
+    def download(url, dest, progress=None, timeout=600):
+        if net.get(url) is None:
+            return None
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(net[url])
+        return hashlib.sha256(net[url]).hexdigest()
+    monkeypatch.setattr(updater, "_download", download)
+
     def publish(tag="v0.2.0", setup=SETUP, sums=None, include_sums=True, **extra):
         sums = sums if sums is not None else f"{hashlib.sha256(setup).hexdigest()}  MapleHelper-Setup.exe\n"
         assets = [{"name": "MapleHelper-Setup.exe", "browser_download_url": "https://dl/setup", "size": len(setup)}]
@@ -144,7 +152,7 @@ def test_installer_with_wrong_hash_is_never_kept(app_env):
     tmp, _, publish = app_env
     publish(sums=f"{'0' * 64}  MapleHelper-Setup.exe\n")
     assert updater.download_app_update("0.1.0") is None
-    assert not (tmp / "updates").exists()
+    assert not list((tmp / "updates").iterdir())             # no installer, no partial file
 
 
 def test_same_size_corruption_is_caught(app_env):
@@ -235,11 +243,11 @@ def test_kb_in_use_is_kept_whole_and_retried_later(env, monkeypatch):
             raise PermissionError("in use")
         return real_rename(self, target)
     monkeypatch.setattr(type(user_kb), "rename", busy)
-    assert updater.update_kb() is False and still_old(user_kb)
+    assert updater.update_kb() is None and still_old(user_kb)
     assert not user_kb.with_name("kb.new").exists()
 
 
-def test_download_reports_progress(monkeypatch):
+def test_download_reports_progress(tmp_path, monkeypatch):
     class Resp:
         headers = {"Content-Length": "600000"}
 
@@ -257,8 +265,10 @@ def test_download_reports_progress(monkeypatch):
             return False
     monkeypatch.setattr(updater.urllib.request, "urlopen", lambda req, timeout=0: Resp())
     seen = []
-    data = updater._download("https://dl/setup", lambda done, total: seen.append((done, total)))
-    assert len(data) == 600000 and seen[-1] == (600000, 600000) and len(seen) == 3
+    dest = tmp_path / "updates" / "setup.part"
+    sha = updater._download("https://dl/setup", dest, lambda done, total: seen.append((done, total)))
+    assert dest.stat().st_size == 600000 and seen[-1] == (600000, 600000) and len(seen) == 3
+    assert sha == hashlib.sha256(b"x" * 600000).hexdigest()
 
 
 def test_update_now_shows_the_installer_progress():
@@ -272,3 +282,78 @@ def test_installer_window_speaks_the_apps_language():
     """The update window follows the app's language, not Windows' (an English player saw a Hebrew installer)."""
     assert "/LANG=english" in updater.installer_args("C:/x/MapleHelper-Setup-v0.7.3.exe", reopen=True, lang="en")
     assert "/LANG=hebrew" in updater.installer_args("C:/x/MapleHelper-Setup-v0.7.3.exe", reopen=True, lang="he")
+
+
+def test_up_to_date_failed_and_updated_are_told_apart(env):
+    user_kb, net, publish = env
+    publish(version="2026.01.01.0000")
+    assert updater.update_kb() is False                       # nothing newer
+    net[MANIFEST] = None
+    assert updater.update_kb() is None                        # offline: failed
+    publish()
+    assert updater.update_kb() is True
+
+
+def test_ai_is_stopped_only_right_before_the_swap(env):
+    user_kb, net, publish = env
+    calls = []
+    publish(version="2026.01.01.0000")
+    updater.update_kb(before_swap=lambda: calls.append("same"))
+    publish(sha="0" * 64)
+    updater.update_kb(before_swap=lambda: calls.append("bad"))
+    assert calls == []                                         # no update: the warm AI keeps running
+    publish()
+    assert updater.update_kb(before_swap=lambda: calls.append(still_old(user_kb))) is True
+    assert calls == [True]                                     # called once, with the old KB still in place
+
+
+@pytest.mark.parametrize("version,newer", [
+    ("2026.01.01.0001", True), ("2026.1.2", True), ("2026.01.01", False), ("2025.12.31.2359", False), ("", False),
+])
+def test_kb_versions_compare_as_numbers(env, version, newer):
+    _, _, publish = env
+    publish(version=version)
+    assert updater.update_kb() is (True if newer else False)
+
+
+def test_unreadable_meta_or_full_disk_fails_cleanly(env, monkeypatch):
+    user_kb, _, publish = env
+    publish(data=make_zip({"index.json": "[]", "meta.json": "{oops"}))
+    assert updater.update_kb() is None and still_old(user_kb)
+    assert not user_kb.with_name("kb.new").exists()
+
+    def full(*_a, **_k):
+        raise OSError(28, "No space left on device")
+    publish()
+    monkeypatch.setattr(updater.zipfile.ZipFile, "extractall", full)
+    assert updater.update_kb() is None and still_old(user_kb)
+    assert not user_kb.with_name("kb.new").exists()
+
+
+def test_changes_since_compares_versions_as_numbers(tmp_path, monkeypatch):
+    (tmp_path / "changelog.json").write_text(json.dumps(
+        [{"version": "2026.10.10.0000"}, {"version": "2026.10.2.0000"}, {"version": "2026.9.30.0000"}]))
+    monkeypatch.setattr(updater, "kb_dir", lambda: tmp_path)
+    assert [e["version"] for e in updater.changes_since("2026.10.01.0000")] == ["2026.10.10.0000", "2026.10.2.0000"]
+
+
+def test_failed_stream_leaves_no_partial_file(tmp_path, monkeypatch):
+    class Broken:
+        headers = {"Content-Length": "10"}
+
+        def read(self, n):
+            raise TimeoutError("stalled")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+    monkeypatch.setattr(updater.urllib.request, "urlopen", lambda req, timeout=0: Broken())
+    dest = tmp_path / "updates" / "setup.part"
+    assert updater._download("https://dl/setup", dest) is None and not dest.exists()
+
+
+def test_short_and_long_versions_are_the_same_release():
+    assert updater._version_tuple("1.0") == updater._version_tuple("v1.0.0")
+    assert updater._version_tuple("0.7.2") > updater._version_tuple("0.7")

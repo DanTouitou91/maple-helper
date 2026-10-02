@@ -64,3 +64,48 @@ def test_top_maps_stop_at_the_end_of_the_map_table(kb_copy):
     page.write_text(text + "\nChange history\nupdated in COT2 ▾ Stat | COT1 | COT2 | Change\n"
                     "HP | 7,560 | 7,420 | -140\nP.DMG | 101 | 252 | +151\n", encoding="utf-8")
     assert KnowledgeBase(kb_copy)._top_maps("monster/130101") == ["Henesys Hunting Ground I"]
+
+
+def test_drop_sort_survives_a_non_numeric_level(kb_copy):
+    import json
+    from maplehelper.kb import KnowledgeBase
+    idx = kb_copy / "index.json"
+    entities = json.loads(idx.read_text(encoding="utf-8"))
+    for e in entities:
+        if e["key"] == "monster/100101":
+            e["props"]["Level"] = "?"
+    idx.write_text(json.dumps(entities), encoding="utf-8")
+    kb = KnowledgeBase(kb_copy)
+    kb.monster_drops = lambda key: ["item/2000000"]                # every monster drops it
+    assert kb.droppers["item/2000000"][-1] == "monster/100101"     # unknown level sorts last
+    assert kb.drop_groups(["item/2000000"])[0]["monster"] == "monster/100100"
+
+
+def test_drop_table_is_written_once_when_missing(kb_copy):
+    from maplehelper.kb import KnowledgeBase
+    kb = KnowledgeBase(kb_copy)
+    kb.ensure_drop_table()
+    table = kb_copy / "drops.tsv"
+    assert table.read_text(encoding="utf-8").startswith("monster\tmonster_level")
+    table.unlink()
+    kb.ensure_drop_table()                  # checked once per loaded KB, not on every question
+    assert not table.exists()
+
+
+def test_drop_table_never_written_into_the_installed_app(kb_copy, monkeypatch):
+    from maplehelper import kb as kbmod
+    monkeypatch.setattr(kbmod.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(kbmod, "BUNDLED_KB", kb_copy)
+    kbmod.KnowledgeBase(kb_copy).ensure_drop_table()
+    assert not (kb_copy / "drops.tsv").exists()
+
+
+def test_drop_table_in_a_read_only_folder_is_skipped(kb_copy, monkeypatch):
+    from pathlib import Path
+    from maplehelper.kb import KnowledgeBase
+
+    def denied(*_a, **_k):
+        raise PermissionError("read-only")
+    monkeypatch.setattr(Path, "write_text", denied)
+    KnowledgeBase(kb_copy).ensure_drop_table()              # no crash, no file
+    assert not (kb_copy / "drops.tsv").exists()

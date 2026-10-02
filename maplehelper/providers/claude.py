@@ -18,8 +18,8 @@ import threading
 from pathlib import Path
 
 from .. import usage
-from .base import CREATE_NEW_CONSOLE, CREATE_NO_WINDOW, Provider, RawResult, classify_error, child_env, find_posix, \
-    find_windows_exe, http_ok, in_terminal, run_installer
+from .base import CREATE_NEW_CONSOLE, CREATE_NO_WINDOW, RUN_TIMEOUT, Deadline, Provider, RawResult, classify_error, \
+    child_env, find_posix, find_windows_exe, http_ok, in_terminal, run_installer
 
 log = logging.getLogger(__name__)
 
@@ -128,18 +128,21 @@ class ClaudeBackend:
         b = self.brain
         return (self.exe, b.model, b.length, b.api_key, str(b.kb.root))
 
+    def _env(self) -> dict:
+        e = env()
+        if self.brain.api_key:
+            e["ANTHROPIC_API_KEY"] = self.brain.api_key
+        else:
+            e.pop("ANTHROPIC_API_KEY", None)  # use the player's Claude account login
+        return e
+
     def _spawn(self) -> subprocess.Popen:
         b = self.brain
         cmd = [self.exe, "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
                "--include-partial-messages", "--restricted", "--strict-mcp-config", "--tools", "Read,Grep,Glob",
                "--model", b.model or "sonnet", "--no-session-persistence", "--system-prompt", b.system_prompt()]
-        e = env()
-        if b.api_key:
-            e["ANTHROPIC_API_KEY"] = b.api_key
-        else:
-            e.pop("ANTHROPIC_API_KEY", None)  # use the player's Claude account login
         return subprocess.Popen(cmd, cwd=str(b.kb.root), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE, env=e, creationflags=CREATE_NO_WINDOW)
+                                stderr=subprocess.PIPE, env=self._env(), creationflags=CREATE_NO_WINDOW)
 
     def prewarm(self) -> None:
         """Start the next question's process now (no-op if one is ready)."""
@@ -186,27 +189,40 @@ class ClaudeBackend:
         content.append({"type": "text", "text": prompt})
         msg = {"type": "user", "message": {"role": "user", "content": content}}
 
+        data = (json.dumps(msg) + "\n").encode("utf-8")
         try:
-            self._proc = self._take_warm() or self._spawn()
+            self._proc = p = self._take_warm() or self._spawn()
+            if self.brain.cancelled:
+                p.kill()                 # Stop was pressed while it started
+            try:
+                p.stdin.write(data)
+                p.stdin.close()
+            except OSError:
+                if self.brain.cancelled:
+                    p.wait()
+                    return RawResult(error="cancelled")
+                # the warm process died meanwhile: start fresh once
+                p.kill()
+                p.wait()
+                self._proc = p = self._spawn()
+                p.stdin.write(data)
+                p.stdin.close()
         except OSError as e:
             log.error("could not start Claude Code: %s", e)
             return RawResult(error=f"launch_failed: {e}")
-        try:
-            self._proc.stdin.write((json.dumps(msg) + "\n").encode("utf-8"))
-            self._proc.stdin.close()
-        except OSError:
-            # the warm process died meanwhile: start fresh once
-            self._proc = self._spawn()
-            self._proc.stdin.write((json.dumps(msg) + "\n").encode("utf-8"))
-            self._proc.stdin.close()
         # get the next one ready while the player reads this answer
         threading.Thread(target=self.prewarm, daemon=True).start()
+        # drain stderr meanwhile: a full pipe would stall the run (Windows' pipe buffer is small)
+        err: list[bytes] = []
+        reader = threading.Thread(target=lambda: err.append(p.stderr.read()), daemon=True)
+        reader.start()
+        deadline = Deadline(p, RUN_TIMEOUT)
 
         current = ""       # text of the assistant message being streamed
         result = None
         limits = None
         model = None
-        for line in self._proc.stdout:
+        for line in p.stdout:
             try:
                 ev = json.loads(line)
             except json.JSONDecodeError:
@@ -227,11 +243,16 @@ class ClaudeBackend:
                 model = ev.get("model") or model
             elif t == "rate_limit_event":
                 limits = usage.parse(ev.get("rate_limit_info"))
-        self._proc.wait()
-        stderr = self._proc.stderr.read().decode("utf-8", errors="replace")
+        p.wait()
+        deadline.cancel()
+        reader.join(timeout=5)
+        stderr = b"".join(err).decode("utf-8", errors="replace")
+        if deadline.expired:
+            log.warning("Claude Code gave no answer in %s s", RUN_TIMEOUT)
+            return RawResult(error="timeout", limits=limits)
         if not result:
             if not limits:
-                log.warning("no result from Claude Code (exit %s): %s", self._proc.returncode, stderr[-1500:])
+                log.warning("no result from Claude Code (exit %s): %s", p.returncode, stderr[-1500:])
             return RawResult(error=classify_error(stderr) or "no_result", limits=limits)
         if result.get("is_error"):
             log.warning("Claude Code error: %s | %s", str(result.get("result", ""))[:500], stderr[-1000:])
@@ -247,8 +268,14 @@ class ClaudeBackend:
                "--no-session-persistence", "--system-prompt", instructions]
         try:
             r = subprocess.run(cmd, input=text.encode("utf-8"), capture_output=True, timeout=timeout,
-                               env=env(), creationflags=CREATE_NO_WINDOW)
-            out = r.stdout.decode("utf-8", errors="replace").strip()
-            return out or None
+                               env=self._env(), creationflags=CREATE_NO_WINDOW)
         except (OSError, subprocess.TimeoutExpired):
             return None
+        out = r.stdout.decode("utf-8", errors="replace").strip()
+        # an error printed as the reply ("usage limit reached", "Please run /login") is one short line:
+        # saved as a summary, it would go into every later prompt
+        if r.returncode != 0 or (len(out) < 200 and classify_error(out)):
+            log.warning("summary failed (exit %s): %s", r.returncode,
+                        (out + r.stderr.decode("utf-8", errors="replace"))[-300:])
+            return None
+        return out or None

@@ -59,7 +59,8 @@ class MapleHelperApp:
         theme.set_mode(self.settings["appearance"])
         self.qapp.setLayoutDirection(Qt.RightToLeft if I18n(self.settings["language"]).rtl else Qt.LeftToRight)
         css = theme.stylesheet(self.font_family, self.settings["font_size"])
-        self.qapp.setStyleSheet(css)
+        if self.qapp.styleSheet() != css:      # the same sheet again repolishes every widget
+            self.qapp.setStyleSheet(css)
         return css
 
     @staticmethod
@@ -94,7 +95,7 @@ class MapleHelperApp:
         self.apply_ai_settings()
         threading.Thread(target=self.brain.prewarm, daemon=True).start()   # first answer without startup delay
         self.overlay = Overlay(self.settings, self.profiles, self.kb, self.brain)
-        self.overlay.setStyleSheet(self.style())
+        self.style()      # the app-wide sheet styles the overlay too
         self.overlay.setWindowOpacity(1.0)
         self.overlay.shot_provider = self.capture
         self.overlay.settings_requested.connect(self.open_settings)
@@ -125,6 +126,8 @@ class MapleHelperApp:
         self.voice.started.connect(self.on_voice_start)
         self.voice.state.connect(lambda s: self.overlay.voice_state(s))
         self.voice.text.connect(self.on_voice_text)
+        # emitted from the transcription thread too: shown on the GUI thread
+        self.voice.failed.connect(lambda error: self.main_thread.call.emit(lambda: self.on_voice_failed(error)))
         self.overlay.mic_clicked.connect(self.voice.toggle)
 
         self.make_tray()
@@ -233,6 +236,15 @@ class MapleHelperApp:
     def on_voice_text(self, text: str):
         fixed = self.kb.resolve_names(text)
         self.overlay.voice_text(fixed, send=self.settings["voice_send_immediately"])
+
+    def on_voice_failed(self, error: str):
+        """No microphone, no permission, or the voice model failed to download: say so instead of nothing."""
+        report.log.warning("voice failed: %s", error)
+        text = I18n(self.settings["language"])("voice_failed", error=error[:200])
+        if self.overlay.isVisible():
+            self.overlay.add_system(text)
+        else:
+            self.toast(text)
 
     def maybe_summarize_later(self):
         """After 30 minutes without the chat, the session is summarized for long-term context."""
@@ -357,13 +369,20 @@ class MapleHelperApp:
         from PySide6.QtCore import QStandardPaths
         t = I18n(self.settings["language"])
         ai = providers.get(self.settings["provider"])
-        info = report.system_info(__version__, updater.local_version(), f"{ai.label}: {ai.status()}")
         desktop = Path(QStandardPaths.writableLocation(QStandardPaths.DesktopLocation) or Path.home())
-        path = report.build_report(desktop, info, dict(self.settings.data))
-        report.log.info("problem report written: %s", path.name)
-        # show the file, selected, in Explorer / Finder
-        subprocess.Popen(["explorer", "/select,", str(path)] if sys.platform == "win32" else ["open", "-R", str(path)])
-        self.toast(t("report_saved"), t("report_saved_body", name=path.name), timeout_ms=12000)
+
+        def done(status: str):
+            info = report.system_info(__version__, updater.local_version(), f"{ai.label}: {status}")
+            path = report.build_report(desktop, info, dict(self.settings.data))
+            report.log.info("problem report written: %s", path.name)
+            # show the file, selected, in Explorer / Finder
+            subprocess.Popen(["explorer", "/select,", str(path)] if sys.platform == "win32" else ["open", "-R", str(path)])
+            self.toast(t("report_saved"), t("report_saved_body", name=path.name), timeout_ms=12000)
+
+        def work():
+            status = ai.status()        # runs the AI's CLI (up to ~40 s): never on the GUI thread
+            self.main_thread.call.emit(lambda: done(status))
+        threading.Thread(target=work, daemon=True).start()
 
     def on_history_cleared(self):
         self.overlay.clear_feed()
@@ -390,7 +409,7 @@ class MapleHelperApp:
 
     def on_settings_changed(self):
         self.overlay.apply_language()
-        self.overlay.setStyleSheet(self.style())
+        self.style()      # the app-wide sheet styles the overlay too
         self.overlay.apply_capture_mode()
         self.apply_saver_mode()
         self.overlay.show_saver_badge(self.settings["saver_mode"])
@@ -429,13 +448,26 @@ class MapleHelperApp:
         if self.overlay.busy or getattr(self.overlay, "_syncing", False):
             return                      # the 3-hourly timer tries again later
 
+        self._update_kb(lambda result, before: self.kb_updated(before) if result else None)
+
+    def _update_kb(self, finished):
+        """Check for a newer KB in the background; finished(result, version before) runs on the GUI thread
+        (result as updater.update_kb returns it). One check at a time: both would unpack into the same folder."""
+        if getattr(self, "_kb_updating", False):
+            return
+        self._kb_updating = True
+
         def work():
             before = updater.local_version()
-            self.brain.shutdown()       # the warm AI process runs inside the KB folder being replaced
-            if updater.update_kb():
+            try:
+                # the warm AI process runs inside the KB folder: stopped only once a verified update replaces it
+                result = updater.update_kb(before_swap=self.brain.shutdown)
+            finally:
+                self._kb_updating = False
+            if result:
                 report.log.info("knowledge base updated to %s", updater.local_version())
                 self.main_thread.call.emit(self.reload_kb)
-                self.main_thread.call.emit(lambda: self.kb_updated(before))
+            self.main_thread.call.emit(lambda: finished(result, before))
         threading.Thread(target=work, daemon=True).start()
 
     def announce_update(self, version: str, url: str):
@@ -513,12 +545,13 @@ class MapleHelperApp:
 
     def update_kb_interactive(self):
         t = I18n(self.settings["language"])
-        before = updater.local_version()
-        if updater.update_kb():
-            self.reload_kb()
-            self.kb_updated(before, interactive=True)
-        else:
-            self.toast(t("kb_uptodate"))
+
+        def finished(result, before):
+            if result:
+                self.kb_updated(before, interactive=True)
+            else:
+                self.toast(t("kb_uptodate") if result is False else t("kb_update_failed"))
+        self._update_kb(finished)
 
     def kb_updated(self, before: str, interactive: bool = False):
         """Tell the player exactly what the update changed (patch notes), not just that it happened."""
@@ -616,6 +649,8 @@ class MapleHelperApp:
         self.kb = KnowledgeBase()
         self.brain.kb = self.kb
         self.overlay.kb = self.kb
+        self.overlay.set_tags(self.overlay.focus_keys)    # drops a tagged card the update removed
+        threading.Thread(target=self.brain.prewarm, daemon=True).start()   # the swap stopped the warm process
 
     def shutdown(self):
         try:

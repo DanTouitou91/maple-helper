@@ -13,6 +13,7 @@ import shutil
 import urllib.error
 import urllib.request
 import zipfile
+from pathlib import Path
 
 from .store import USER_KB, kb_dir
 
@@ -39,9 +40,14 @@ def changelog() -> list[dict]:
     return [e for e in log if isinstance(e, dict) and e.get("version")] if isinstance(log, list) else []
 
 
+def _kb_version(v) -> tuple[int, ...]:
+    """'2026.10.02.0638' -> (2026, 10, 2, 638): compared as numbers, so a shorter or unpadded stamp still sorts right."""
+    return tuple(int(x) for x in re.findall(r"\d+", str(v)))
+
+
 def changes_since(version: str) -> list[dict]:
     """The updates a player hasn't seen yet: every entry newer than the KB they had."""
-    return [e for e in changelog() if str(e["version"]) > version]
+    return [e for e in changelog() if _kb_version(e["version"]) > _kb_version(version)]
 
 
 def _get(url: str, timeout: int = 30) -> bytes | None:
@@ -53,39 +59,44 @@ def _get(url: str, timeout: int = 30) -> bytes | None:
         return None
 
 
-def update_kb() -> bool:
-    """Download a newer knowledge base if one is published. Returns True when updated."""
+def update_kb(before_swap=None) -> bool | None:
+    """Download a newer knowledge base if one is published.
+    True: updated; False: already the newest; None: failed (offline, a bad download, the KB folder in use).
+    before_swap() runs right before the verified new KB replaces the current one: stop what works inside it."""
     if not MANIFEST_URL:
         return False
     raw = _get(MANIFEST_URL, timeout=15)
     if not raw:
-        return False
+        return None
     try:
         manifest = json.loads(raw)
-    except json.JSONDecodeError:
-        return False
+    except ValueError:
+        return None
     if not isinstance(manifest, dict) or not manifest.get("url"):
-        return False
-    if str(manifest.get("version", "")) <= local_version():
+        return None
+    if _kb_version(manifest.get("version", "")) <= _kb_version(local_version()):
         return False
     data = _get(manifest["url"], timeout=300)
     if not data or hashlib.sha256(data).hexdigest() != manifest.get("sha256"):
-        return False
+        return None
     tmp = USER_KB.with_name("kb.new")
     shutil.rmtree(tmp, ignore_errors=True)
     try:
         with zipfile.ZipFile(io.BytesIO(data)) as z:
             z.extractall(tmp)
-    except zipfile.BadZipFile:
+        meta_path = tmp / "meta.json"
+        meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
+        meta = meta if isinstance(meta, dict) else {}
+        meta["version"] = manifest["version"]
+        meta_path.write_text(json.dumps(meta, indent=1), encoding="utf-8")
+        ok = (tmp / "index.json").exists()
+    except (zipfile.BadZipFile, OSError, ValueError):     # a broken zip or meta.json, a full disk
+        ok = False
+    if not ok:
         shutil.rmtree(tmp, ignore_errors=True)
-        return False
-    if not (tmp / "index.json").exists():
-        shutil.rmtree(tmp, ignore_errors=True)
-        return False
-    meta_path = tmp / "meta.json"
-    meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
-    meta["version"] = manifest["version"]
-    meta_path.write_text(json.dumps(meta, indent=1), encoding="utf-8")
+        return None
+    if before_swap:
+        before_swap()
     # swap by renames: on Windows a folder another process works in (the AI runs inside the KB)
     # can't be removed or renamed; then keep the current KB intact and try again next time
     old = USER_KB.with_name("kb.old")
@@ -98,7 +109,7 @@ def update_kb() -> bool:
         if old.exists() and not USER_KB.exists():
             old.rename(USER_KB)
         shutil.rmtree(tmp, ignore_errors=True)
-        return False
+        return None
     shutil.rmtree(old, ignore_errors=True)
     return True
 
@@ -110,7 +121,8 @@ SUMS_ASSET = "SHA256SUMS.txt"     # "<sha256>  <file name>" lines, published wit
 
 
 def _version_tuple(v: str) -> tuple[int, ...]:
-    return tuple(int(x) for x in re.findall(r"\d+", v)[:3]) or (0,)
+    parts = [int(x) for x in re.findall(r"\d+", v)[:3]]
+    return tuple((parts + [0, 0, 0])[:3])      # padded: "1.0" is the same version as "1.0.0"
 
 
 def _asset(rel: dict, name: str) -> dict | None:
@@ -149,23 +161,28 @@ def newer_release(current: str) -> tuple[str, str] | None:
     return rel["tag_name"].lstrip("v"), rel.get("html_url") or f"https://github.com/{APP_REPO}/releases/latest"
 
 
-def _download(url: str, progress=None, timeout: int = 600) -> bytes | None:
-    """The whole file, reporting progress(done_bytes, total_bytes) as it arrives."""
+def _download(url: str, dest: Path, progress=None, timeout: int = 600) -> str | None:
+    """Stream the file into dest (~100 MB: never all in memory), reporting progress(done_bytes, total_bytes)
+    as it arrives. Returns its SHA-256, or None on failure."""
+    sha = hashlib.sha256()
     try:
+        dest.parent.mkdir(parents=True, exist_ok=True)
         req = urllib.request.Request(url, headers={"User-Agent": "MapleHelper"})
-        with urllib.request.urlopen(req, timeout=timeout) as r:
+        with urllib.request.urlopen(req, timeout=timeout) as r, dest.open("wb") as f:
             total = int(r.headers.get("Content-Length") or 0)
-            chunks, done = [], 0
+            done = 0
             while True:
                 chunk = r.read(256 * 1024)
                 if not chunk:
                     break
-                chunks.append(chunk)
+                f.write(chunk)
+                sha.update(chunk)
                 done += len(chunk)
                 if progress:
                     progress(done, total)
-            return b"".join(chunks)
+        return sha.hexdigest()
     except (urllib.error.URLError, TimeoutError, ValueError, OSError):
+        dest.unlink(missing_ok=True)
         return None
 
 
@@ -183,13 +200,16 @@ def download_app_update(current: str, progress=None) -> str | None:
     want = _published_sha256(rel, SETUP_ASSET) if asset else None
     if not want:
         return None
-    url = asset["browser_download_url"]
-    data = _download(url, progress) if progress else _get(url, timeout=600)
-    if not data or hashlib.sha256(data).hexdigest() != want:
-        return None
     path = USER_KB.parent / "updates" / f"MapleHelper-Setup-{rel['tag_name']}.exe"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(data)
+    part = path.with_name(path.name + ".part")      # only a verified file ever gets the installer's name
+    if _download(asset["browser_download_url"], part, progress) != want:
+        part.unlink(missing_ok=True)
+        return None
+    try:
+        part.replace(path)
+    except OSError:
+        part.unlink(missing_ok=True)
+        return None
     return str(path)
 
 

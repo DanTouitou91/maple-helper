@@ -17,9 +17,8 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject, Signal
 
-from .capture import grab_image, grab_jpeg
+from .capture import grab_image, grab_jpeg, looks_like_game
 
-GAME_TITLES = ("MapleStory Classic", "MapleStory", "Classic World")
 # virtual key codes (HIToolbox kVK_F1...). Macs send F-keys only with fn held, unless
 # "Use F1, F2, etc. keys as standard function keys" is on (System Settings > Keyboard).
 KEYCODES = {"F1": 122, "F2": 120, "F3": 99, "F4": 118, "F5": 96, "F6": 97,
@@ -65,13 +64,10 @@ def pick_game_window(infos, own_pid: int) -> int | None:
     for w in infos:
         if w.get("kCGWindowOwnerPID") == own_pid or w.get("kCGWindowLayer", 0) != 0:
             continue
-        names = f"{w.get('kCGWindowName') or ''} {w.get('kCGWindowOwnerName') or ''}".lower()
-        if "maple helper" in names:
-            continue
         b = w.get("kCGWindowBounds") or {}
         if b.get("Width", 0) <= 50 or b.get("Height", 0) <= 50:
             continue
-        if any(g.lower() in names for g in GAME_TITLES):
+        if looks_like_game(w.get("kCGWindowName") or "", w.get("kCGWindowOwnerName") or ""):
             return int(w["kCGWindowNumber"])
     return None
 

@@ -3,13 +3,14 @@ from __future__ import annotations
 
 import time
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (QFrame, QHBoxLayout, QLabel, QLineEdit, QProgressBar, QPushButton, QScrollArea,
                                QToolButton, QVBoxLayout, QWidget)
 
 from .. import bidi, pins
 from ..i18n import I18n
+from . import theme
 from .controls import rtl_buttons
 from .glass import GlassDialog
 
@@ -93,7 +94,7 @@ class HistoryDialog(GlassDialog):
         self.t = t = I18n(lang or "he")
         super().__init__(t("history_title", name=name), t.rtl)
         self.pairs = pairs
-        self.setStyleSheet(stylesheet)
+        theme.apply(self, stylesheet)
         self.resize(540, 720)
         outer = QVBoxLayout(self.content)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -101,7 +102,9 @@ class HistoryDialog(GlassDialog):
         self.search = QLineEdit()
         self.search.setPlaceholderText(bidi.plain(t("history_search"), t.rtl))
         self.search.setClearButtonEnabled(True)
-        self.search.textChanged.connect(lambda *_: self._fill())
+        # the list follows the typing once it pauses: every answer is rebuilt as rich text
+        self._search_soon = QTimer(self, singleShot=True, interval=150, timeout=self._fill)
+        self.search.textChanged.connect(lambda *_: self._search_soon.start())
         outer.addWidget(self.search)
         self.count = QLabel(objectName="RowHint")
         outer.addWidget(self.count)

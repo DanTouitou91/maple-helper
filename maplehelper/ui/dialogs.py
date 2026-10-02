@@ -16,23 +16,10 @@ from ..i18n import I18n
 from ..kb import KnowledgeBase
 from ..store import ASSETS, History, Profiles, Settings
 from . import theme
+from ..jobs import JOBS, jobs_for
 
-# MapleStory Classic job tree: base class -> [(job, min level)]
-JOBS = {
-    "Beginner": [("Beginner", 1)],
-    "Warrior": [("Beginner", 1), ("Warrior", 10), ("Fighter", 30), ("Page", 30), ("Spearman", 30),
-                ("Crusader", 70), ("White Knight", 70), ("Dragon Knight", 70)],
-    "Magician": [("Beginner", 1), ("Magician", 8), ("F/P Wizard", 30), ("I/L Wizard", 30), ("Cleric", 30),
-                 ("F/P Mage", 70), ("I/L Mage", 70), ("Priest", 70)],
-    "Bowman": [("Beginner", 1), ("Bowman", 10), ("Hunter", 30), ("Crossbowman", 30), ("Ranger", 70), ("Sniper", 70)],
-    "Thief": [("Beginner", 1), ("Thief", 10), ("Assassin", 30), ("Bandit", 30), ("Hermit", 70), ("Chief Bandit", 70)],
-}
 CLASS_HE = {"Beginner": "ביגינר", "Warrior": "לוחם", "Magician": "קוסם", "Bowman": "קשת", "Thief": "גנב"}
 MAX_LEVEL = 200
-
-
-def jobs_for(base_class: str, level: int) -> list[str]:
-    return [j for j, lv in JOBS.get(base_class, []) if lv <= level]
 
 
 def _title(text: str) -> QLabel:
@@ -55,6 +42,7 @@ class _Bridge(QObject):
     status = Signal(str, str)      # provider, status
     account = Signal(object)
     logged_out = Signal()
+    key_checked = Signal(str, str, bool)      # provider, key, works
 
 
 class CharacterForm(QWidget):
@@ -207,13 +195,14 @@ class Onboarding(GlassDialog):
         self.resize(600, 680)
         self._bridge = _Bridge()
         self._bridge.status.connect(self._on_status)
+        self._bridge.key_checked.connect(self._on_key_checked)
         self.provider = providers.get(settings["provider"]).name
         self._ai_ok = False
         self._build()
 
     def _build(self):
         self.title_label.hide()
-        self.setStyleSheet(self.stylesheet_fn(1.0))
+        theme.apply(self, self.stylesheet_fn(1.0))
         outer = QVBoxLayout(self.content)
         outer.setContentsMargins(10, 4, 10, 0)
         self.stack = QStackedWidget()
@@ -413,8 +402,9 @@ class Onboarding(GlassDialog):
 
     def _poll_status(self, seconds: int):
         self._poll_left = seconds // 3
-        self._poll_timer = QTimer(self, interval=3000)
-        self._poll_timer.timeout.connect(self._poll_tick)
+        if not hasattr(self, "_poll_timer"):          # one timer, however often Install / Sign in is clicked
+            self._poll_timer = QTimer(self, interval=3000)
+            self._poll_timer.timeout.connect(self._poll_tick)
         self._poll_timer.start()
 
     def _poll_tick(self):
@@ -440,10 +430,27 @@ class Onboarding(GlassDialog):
 
     def _check_key(self):
         key = self.key_edit.text().strip()
+        if not key:
+            self.status_label.setText("✗")
+            return
         ai = self._ai()
-        if key and ai.test_api_key(key):
+        self.status_label.setText(bidi.plain(self.t("ob_checking"), self.t.rtl))
+
+        def check():           # a network call (up to 15 s): never on the GUI thread
+            try:
+                ok = bool(ai.test_api_key(key))
+            except Exception:      # noqa: BLE001
+                ok = False
+            self._bridge.key_checked.emit(ai.name, key, ok)
+        threading.Thread(target=check, daemon=True).start()
+
+    def _on_key_checked(self, provider: str, key: str, ok: bool):
+        if provider != self.provider:
+            return            # a check that started before the player switched provider
+        ai = providers.get(provider)
+        if ok:
             ai.save_api_key(key)
-            self.settings.set_api_key_mode(ai.name, True)
+            self.settings.set_api_key_mode(provider, True)
             self._ai_ok = True
             self.status_label.setText(bidi.plain(self.t("ob_connected"), self.t.rtl))
         else:
@@ -504,7 +511,7 @@ class ConfirmDialog(GlassDialog):
 
     def __init__(self, title: str, body: str, confirm: str, cancel: str, rtl: bool, stylesheet: str, danger=True):
         super().__init__(title, rtl)
-        self.setStyleSheet(stylesheet)
+        theme.apply(self, stylesheet)
         self.resize(420, 230)
         lay = QVBoxLayout(self.content)
         msg = QLabel(bidi.plain(body, rtl), objectName="DialogBody")
@@ -540,7 +547,7 @@ class SettingsDialog(GlassDialog):
         super().__init__(t("settings"), t.rtl)
         self.settings, self.profiles, self.kb = settings, profiles, kb
         self.stylesheet_fn = stylesheet_fn
-        self.setStyleSheet(stylesheet_fn(1.0))
+        theme.apply(self, stylesheet_fn(1.0))
         self.resize(500, 720)
         rtl = t.rtl
 

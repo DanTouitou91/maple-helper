@@ -25,6 +25,7 @@ class MiniBubble(QWidget):
         self.setCursor(Qt.PointingHandCursor)
         self.setToolTip("Maple Helper")
         self._icon = QPixmap(str(ASSETS / "brand" / "icon-64.png"))
+        self._scaled: dict[int, QPixmap] = {}
         self._press: QPoint | None = None
         self._grab: QPoint | None = None
         self._dragging = False
@@ -53,8 +54,10 @@ class MiniBubble(QWidget):
         p.drawEllipse(r.adjusted(0.5, 0.5, -0.5, -0.5))
         if not self._icon.isNull():
             s = 34 if not self._pressed else 31               # instant press feedback
-            icon = self._icon.scaled(s * 2, s * 2, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            icon.setDevicePixelRatio(2)
+            icon = self._scaled.get(s)
+            if icon is None:                                  # two sizes, scaled once each
+                icon = self._scaled[s] = self._icon.scaled(s * 2, s * 2, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                icon.setDevicePixelRatio(2)
             p.drawPixmap(int(r.center().x() - s / 2), int(r.center().y() - s / 2), icon)
 
     def mousePressEvent(self, e):

@@ -80,3 +80,8 @@ def test_autostart_from_source_runs_the_module(tmp_path, monkeypatch):
     macapi.set_autostart(True, ["--background"], agent)
     assert plistlib.loads(agent.read_bytes())["ProgramArguments"] == ["/usr/local/bin/python3", "-m", "maplehelper",
                                                                        "--background"]
+
+
+def test_a_browser_tab_about_the_game_is_not_the_game():
+    infos = [win(1, "MapleStory Classic drops", "Google Chrome"), win(2, "MapleStory Classic", "wine64-preloader")]
+    assert macapi.pick_game_window(infos, OWN_PID) == 2

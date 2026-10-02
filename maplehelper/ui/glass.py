@@ -1,69 +1,11 @@
-"""A liquid-glass backdrop that works even with the system's transparency effects off.
-
-The overlay excludes itself from screen capture, samples what is behind it
-(the game), and repaints that as a frosted, color-saturated material a few
-times a second. Sampling happens at quarter resolution, so it stays cheap.
-"""
+"""The glass material every window paints, and the frameless glass dialog."""
 from __future__ import annotations
 
-from PIL import ImageEnhance, ImageFilter
-from PySide6.QtCore import QObject, QTimer, Signal
-from PySide6.QtGui import QImage, QPixmap
+from PySide6.QtCore import QRectF, Qt
+from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPainterPath, QPen
+from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QToolButton, QVBoxLayout, QWidget
 
-from .. import osapi
-
-SCALE = 0.25          # sample at quarter resolution
-BLUR = 7              # at quarter scale ≈ 28px of real blur
-SATURATION = 1.7      # iOS-style vibrancy: blurred colors get richer, not muddier
-BRIGHTNESS = 0.78
-INTERVAL_MS = 120
-
-
-class GlassBackdrop(QObject):
-    updated = Signal()
-
-    def __init__(self, widget):
-        super().__init__(widget)
-        self.widget = widget
-        self.pixmap: QPixmap | None = None
-        self.timer = QTimer(self, interval=INTERVAL_MS, timeout=self.refresh)
-
-    def start(self):
-        self.refresh()
-        self.timer.start()
-
-    def stop(self):
-        self.timer.stop()
-
-    def refresh(self):
-        w = self.widget
-        if not w.isVisible():
-            return
-        dpr = w.devicePixelRatioF() if osapi.SCREEN_COORDS_ARE_PHYSICAL else 1.0
-        g = w.geometry()
-        try:
-            img = osapi.grab_screen(round(g.x() * dpr), round(g.y() * dpr), round(g.width() * dpr),
-                                     round(g.height() * dpr))
-        except Exception:
-            return
-        small = img.resize((max(1, int(img.width * SCALE)), max(1, int(img.height * SCALE))))
-        small = small.filter(ImageFilter.GaussianBlur(BLUR))
-        small = ImageEnhance.Color(small).enhance(SATURATION)
-        small = ImageEnhance.Brightness(small).enhance(BRIGHTNESS)
-        data = small.tobytes("raw", "RGB")
-        qimg = QImage(data, small.width, small.height, small.width * 3, QImage.Format_RGB888).copy()
-        self.pixmap = QPixmap.fromImage(qimg)
-        self.updated.emit()
-        w.update()
-
-
-# ---------------------------------------------------------------- shared painting
-
-from PySide6.QtCore import QRectF, Qt  # noqa: E402
-from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPainterPath, QPen  # noqa: E402
-from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QToolButton, QVBoxLayout, QWidget  # noqa: E402
-
-from . import theme  # noqa: E402
+from . import theme
 
 SHADOW = 12
 
@@ -75,9 +17,8 @@ def glass_path(widget, radius: float = None) -> QPainterPath:
     return path
 
 
-def paint_glass(widget, backdrop: "GlassBackdrop | None", strength: float = 0.6, radius: float = None) -> None:
-    """The one material every window uses: soft shadow, blurred backdrop, neutral tint, sheen, rim.
-    strength (0.4–1.0) scales the tint: higher = more opaque, easier to read over busy scenes."""
+def paint_glass(widget, radius: float = None) -> None:
+    """The one material every window uses: soft shadow, neutral tint, sheen, rim."""
     c = theme.P()
     r = theme.RADIUS if radius is None else radius
     p = QPainter(widget)
@@ -91,16 +32,8 @@ def paint_glass(widget, backdrop: "GlassBackdrop | None", strength: float = 0.6,
     path = glass_path(widget, r)
     p.save()
     p.setClipPath(path)
-    live = backdrop is not None and backdrop.pixmap is not None
-    if live:
-        p.drawPixmap(widget.rect(), backdrop.pixmap)
-    base = c["glass_alpha"] if live else c["solid_alpha"]
     tint = QColor(*c["glass"])
-    if live:
-        # strength 0.6 = the designed glass; toward 1.0 more solid (readability), toward 0.4 clearer
-        s = max(0.4, min(1.0, strength))
-        base = base + (1 - base) * (s - 0.6) / 0.4 if s >= 0.6 else base * s / 0.6
-    tint.setAlphaF(base)
+    tint.setAlphaF(c["solid_alpha"])
     p.fillPath(path, tint)
     sheen = QLinearGradient(0, SHADOW, 0, SHADOW + min(170, widget.height()))
     sheen.setColorAt(0.0, QColor(255, 255, 255, c["sheen"]))
@@ -145,7 +78,6 @@ class GlassDialog(QDialog):
         self.setLayoutDirection(Qt.RightToLeft if rtl else Qt.LeftToRight)
         self._show_in_captures = show_in_captures
         self._strength = strength
-        self.backdrop = GlassBackdrop(self)
         root = QVBoxLayout(self)
         root.setContentsMargins(SHADOW + 18, SHADOW + 10, SHADOW + 18, SHADOW + 16)
         root.setSpacing(8)
@@ -165,4 +97,4 @@ class GlassDialog(QDialog):
         root.addWidget(self.content, 1)
 
     def paintEvent(self, e):
-        paint_glass(self, None)
+        paint_glass(self)

@@ -40,7 +40,7 @@ class ExpBar(QFrame):
         from .. import glossary
         from . import terms
         if not getattr(self, "_terms", False):
-            terms.watch(self.text, t.lang)
+            terms.watch(self.text)
             self._terms = True
         d = "rtl" if rtl else "ltr"
         self.text.setText(glossary.annotate(bidi.paragraph_html(text, d).replace("margin:0 0 4px 0;", "margin:0;"),

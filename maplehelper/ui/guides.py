@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (QApplication, QButtonGroup, QFrame, QHBoxLayout, 
 
 from .. import bidi, guides
 from ..i18n import I18n
+from . import theme
 from .controls import rtl_buttons
 from .glass import GlassDialog
 
@@ -118,20 +119,29 @@ class ImageZoom(QObject):
 COVER_W = 480       # a guide's cover picture, shown when hovering its card
 
 
+_cover_pop: QLabel | None = None
+
+
 class CoverPic(QLabel):
-    """The small cover on a guide's card; hovering it shows the cover large."""
+    """The small cover on a guide's card; hovering it shows the cover large (one popup for every card)."""
 
     def __init__(self, path: str | None):
         super().__init__()
-        self.full = QPixmap(path) if path else QPixmap()
-        self.pop = QLabel(None, Qt.ToolTip | Qt.FramelessWindowHint)
-        self.pop.setAttribute(Qt.WA_TransparentForMouseEvents)
-        self.pop.setStyleSheet("background: rgba(28,28,30,0.92); border-radius: 12px; padding: 8px;")
-        self.destroyed.connect(self.pop.deleteLater)
+        self.path = path
+
+    @property
+    def pop(self) -> QLabel:
+        global _cover_pop
+        if _cover_pop is None:
+            _cover_pop = QLabel(None, Qt.ToolTip | Qt.FramelessWindowHint)
+            _cover_pop.setAttribute(Qt.WA_TransparentForMouseEvents)
+            _cover_pop.setStyleSheet("background: rgba(28,28,30,0.92); border-radius: 12px; padding: 8px;")
+        return _cover_pop
 
     def enterEvent(self, e):
-        if not self.full.isNull():
-            big = self.full.scaledToWidth(min(COVER_W, self.full.width()), Qt.SmoothTransformation)
+        full = QPixmap(self.path) if self.path else QPixmap()      # the large picture loads on hover only
+        if not full.isNull():
+            big = full.scaledToWidth(min(COVER_W, full.width()), Qt.SmoothTransformation)
             self.pop.setPixmap(big)
             self.pop.adjustSize()
             at = QCursor.pos() + QPoint(18, 18)
@@ -165,9 +175,7 @@ class GuideRow(QFrame):
         pic = CoverPic(str(img) if img else None)
         pic.setFixedSize(44, 44)
         pic.setAlignment(Qt.AlignCenter)
-        pm = QPixmap(str(img)) if img else QPixmap()
-        if not pm.isNull():
-            pic.setPixmap(pm.scaled(44, 44, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        pic.setPixmap(theme.thumb(img, 44))
         row.addWidget(pic, 0, Qt.AlignTop)
         col = QVBoxLayout()
         col.setSpacing(2)
@@ -194,7 +202,7 @@ class GuidesDialog(GlassDialog):
         self.t = t = I18n(lang or "he")
         super().__init__(t("guides"), t.rtl)
         self.kb, self.c = kb, character
-        self.setStyleSheet(stylesheet)
+        theme.apply(self, stylesheet)
         self.resize(560, 760)
         self.all = guides.all_guides(kb)
         self.picks = guides.for_you(kb, character)
@@ -221,7 +229,9 @@ class GuidesDialog(GlassDialog):
         self.search = QLineEdit()
         self.search.setPlaceholderText(bidi.plain(t("g_search"), rtl))
         self.search.setClearButtonEnabled(True)
-        self.search.textChanged.connect(lambda *_: self._fill())
+        # the rows follow the typing once it pauses, not a rebuild per letter
+        self._search_soon = QTimer(self, singleShot=True, interval=150, timeout=self._fill)
+        self.search.textChanged.connect(lambda *_: self._search_soon.start())
         lay.addWidget(self.search)
         chips = QHBoxLayout()
         chips.setSpacing(6)
@@ -362,7 +372,6 @@ class GuidesDialog(GlassDialog):
 
     def _open_book(self, key: str, b: dict):
         """A full guide (pictures, tables, notes) from assets/guides."""
-        from . import theme
         t = self.t
         rtl = b["lang"] != "en" and t.rtl
         self.r_title.setLayoutDirection(Qt.RightToLeft if rtl else Qt.LeftToRight)

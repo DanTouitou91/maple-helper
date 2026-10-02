@@ -86,7 +86,46 @@ def app_font(size: int = 14) -> QFont:
     return f
 
 
+_CSS: dict[tuple, str] = {}
+
+
 def stylesheet(font_family: str, size: int, opacity: float = 1.0) -> str:
+    """Built once per look: every window asks for it as it opens, and the same text lets the app skip
+    re-applying it (setStyleSheet repolishes every widget)."""
+    key = (font_family, size, MODE, ICON_FONT)
+    if key not in _CSS:
+        _CSS[key] = _stylesheet(font_family, size)
+    return _CSS[key]
+
+
+def apply(widget, css: str) -> None:
+    """A window's own copy of the sheet, only when the app doesn't carry it already: an identical
+    second sheet doubles the style matching for every widget in the window."""
+    from PySide6.QtWidgets import QApplication
+    app = QApplication.instance()
+    if app is None or app.styleSheet() != css:
+        widget.setStyleSheet(css)
+
+
+def thumb(path, w: int, h: int | None = None):
+    """A picture scaled to fit w x h, decoded and scaled once per size (the same item and monster
+    pictures show up in many cards and windows)."""
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QPixmap, QPixmapCache
+    if not path:
+        return QPixmap()
+    h = h or w
+    key = f"thumb:{path}:{w}x{h}"
+    pm = QPixmapCache.find(key)
+    if pm is None:
+        pm = QPixmap(str(path))
+        if not pm.isNull():
+            pm = pm.scaled(w, h, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        QPixmapCache.insert(key, pm)
+    return pm
+
+
+def _stylesheet(font_family: str, size: int) -> str:
     s, c = size, P()
     return f"""
     * {{ font-family: "{font_family}"; font-size: {s}px; color: {c['text']}; }}

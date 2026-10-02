@@ -5,6 +5,7 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -14,6 +15,7 @@ CREATE_NEW_CONSOLE = 0x00000010 if sys.platform == "win32" else 0
 
 # API keys live in Windows Credential Manager / the macOS Keychain, never in plain files.
 KEYRING_SERVICE = "MapleHelper"
+RUN_TIMEOUT = 180    # seconds: a hung CLI ends with an error instead of "thinking…" forever
 
 
 @dataclass
@@ -98,6 +100,27 @@ def http_ok(url: str, headers: dict) -> bool:
             return r.status == 200
     except (urllib.error.URLError, TimeoutError):
         return False
+
+
+class Deadline:
+    """Kills a process that runs past its time limit; .expired says afterwards whether it did."""
+
+    def __init__(self, proc: subprocess.Popen, seconds: float):
+        self.expired = False
+        self._proc = proc
+        self._timer = threading.Timer(seconds, self._expire)
+        self._timer.daemon = True
+        self._timer.start()
+
+    def _expire(self) -> None:
+        self.expired = True
+        try:
+            self._proc.kill()
+        except OSError:
+            pass
+
+    def cancel(self) -> None:
+        self._timer.cancel()
 
 
 def classify_error(text: str) -> str | None:

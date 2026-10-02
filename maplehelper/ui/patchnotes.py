@@ -2,12 +2,12 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QScrollArea, QVBoxLayout, QWidget
 
 from .. import bidi
 from ..i18n import STRINGS, I18n
 from ..kb import KnowledgeBase
+from . import theme
 from .controls import Section, rtl_buttons
 from .glass import GlassDialog
 from .widgets import EntityCard, Selectable
@@ -55,10 +55,7 @@ class ChangeCard(Selectable, QFrame):
         pic = QLabel()
         pic.setFixedSize(48, 48)
         pic.setAlignment(Qt.AlignCenter)
-        img = kb.picture(r["key"])
-        pm = QPixmap(str(img)) if img else QPixmap()
-        if not pm.isNull():
-            pic.setPixmap(pm.scaled(48, 48, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        pic.setPixmap(theme.thumb(kb.picture(r["key"]), 48))
         row.addWidget(pic, 0, Qt.AlignTop)
         col = QVBoxLayout()
         col.setSpacing(2)
@@ -81,7 +78,7 @@ class WhatsNewDialog(GlassDialog):
     def __init__(self, notes: list[dict], lang: str, stylesheet: str):
         self.t = t = I18n(lang or "he")
         super().__init__(t("whats_new"), t.rtl)
-        self.setStyleSheet(stylesheet)
+        theme.apply(self, stylesheet)
         self.resize(480, 560)
         outer = QVBoxLayout(self.content)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -118,7 +115,7 @@ class PatchNotesDialog(GlassDialog):
         self.t = t = I18n(lang or "he")
         super().__init__(t("patch_notes"), t.rtl)
         self.kb = kb
-        self.setStyleSheet(stylesheet)
+        theme.apply(self, stylesheet)
         self.resize(520, 680)
         outer = QVBoxLayout(self.content)
         outer.setContentsMargins(0, 0, 0, 0)

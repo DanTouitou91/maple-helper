@@ -3,14 +3,14 @@ from __future__ import annotations
 
 import time
 
-from PySide6.QtCore import (QEasingCurve, QObject, QParallelAnimationGroup, QPoint, QPropertyAnimation, QRect, QRectF,
-                            Qt, QThread, QTimer, Signal)
+from PySide6.QtCore import (QAbstractAnimation, QEasingCurve, QObject, QParallelAnimationGroup, QPoint,
+                            QPropertyAnimation, QRect, QRectF, Qt, QThread, QTimer, Signal)
 from PySide6.QtGui import QAction, QGuiApplication, QIcon, QPainterPath, QPixmap
 from PySide6.QtWidgets import (QFrame, QGraphicsOpacityEffect, QHBoxLayout, QLabel, QLineEdit, QMenu, QPushButton,
                                QScrollArea, QSizeGrip, QToolButton, QVBoxLayout, QWidget)
 
 from .. import __version__, bidi, osapi, quick
-from ..brain import Answer, Brain
+from ..brain import META, Answer, Brain
 from ..i18n import STRINGS, I18n
 from ..kb import KnowledgeBase
 from ..session import SessionStats, lines as session_lines, questions as session_questions
@@ -85,6 +85,14 @@ class FocusLineEdit(QLineEdit):
         self.focus_changed.emit(False)
 
 
+def _visible(text: str) -> str:
+    """A streaming answer can end in the first characters of the hidden @@META@@ marker: don't flash them."""
+    for n in range(len(META) - 1, 0, -1):
+        if text.endswith(META[:n]):
+            return text[:-n].rstrip()
+    return text
+
+
 def _alive(w) -> bool:
     """False once Qt deleted the widget (e.g. the chat was cleared)."""
     try:
@@ -116,7 +124,6 @@ class Overlay(QWidget):
     def __init__(self, settings: Settings, profiles: Profiles, kb: KnowledgeBase, brain: Brain):
         super().__init__(None, Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
         from . import terms
-        terms.LANG = settings["language"] or "he"
         terms.setup()
         self.setObjectName("Overlay")
         self.setAttribute(Qt.WA_TranslucentBackground)
@@ -133,6 +140,12 @@ class Overlay(QWidget):
         self._session_started: float | None = None
         self.stats: SessionStats | None = None
         self._anim: QParallelAnimationGroup | None = None
+        self._target_geometry: QRect | None = None     # where a growing window is going
+        self._save_timer = QTimer(self, singleShot=True, interval=300, timeout=self.save_geometry)
+        # a streaming answer renders at most every 60 ms, always its newest text
+        self._delta_text = ""
+        self._delta_timer = QTimer(self, singleShot=True, interval=60, timeout=self._render_delta)
+        self._stopping = False                         # the player stopped the answer; waiting for it to end
         self.bubble = MiniBubble()
         self.bubble.clicked.connect(self.restore_from_bubble)
         self.bubble.moved.connect(lambda pt: self.settings.__setitem__("bubble_pos", {"x": pt.x(), "y": pt.y()}))
@@ -159,7 +172,7 @@ class Overlay(QWidget):
 
     def paintEvent(self, e):
         """Liquid glass: the blurred game behind, a neutral tint, a light-catching sheen and rim."""
-        paint_glass(self, None)
+        paint_glass(self)
 
     # ------------------------------------------------------------------ layout
 
@@ -316,7 +329,7 @@ class Overlay(QWidget):
         row.addWidget(self.mic_btn)
         self.send_btn = QToolButton(objectName="Send", text=theme.ICON["send"])
         self.send_btn.setCursor(Qt.PointingHandCursor)
-        self.send_btn.clicked.connect(self._send_typed)
+        self.send_btn.clicked.connect(lambda: self.stop_answer() if self.busy else self._send_typed())   # mid-answer: stop
         self.send_btn.setEnabled(False)
         row.addWidget(self.send_btn)
         # what the next question sends: the F9 screenshot goes with the first question only
@@ -337,10 +350,12 @@ class Overlay(QWidget):
         m = self.SHADOW
         self.grip.move(self.width() - m - 18 if not self.t.rtl else m + 2, self.height() - m - 18)
         if self.isVisible():
-            QTimer.singleShot(300, self.save_geometry)
+            self._save_timer.start()
 
     def apply_language(self):
+        from . import terms
         self.t = I18n(self.settings["language"] or "he")
+        terms.LANG = self.t.lang              # the "?" popups follow a language switch
         self.setLayoutDirection(Qt.RightToLeft if self.t.rtl else Qt.LeftToRight)
         hk_voice = self.settings["hotkey_voice"]
         self._placeholder = self.t("input_placeholder").replace("F10", hk_voice)
@@ -451,33 +466,42 @@ class Overlay(QWidget):
         self.settings["tips_dismissed"] = data
         self.refresh_plan()
 
-    def ask_with_screenshot(self, question: str):
-        """Like "What now?": a fresh screenshot of the game, then the question."""
-        self.setWindowOpacity(0.0)
-        QTimer.singleShot(120, lambda: self._capture_and_ask(question))
+    def _shoot(self, hwnd):
+        """The game's screenshot, or None."""
+        if not hwnd:
+            return None
+        try:
+            return self.shot_provider(hwnd) if self.shot_provider else osapi.capture_game(hwnd)
+        except Exception:      # noqa: BLE001 - a failed capture must not break the chat
+            import logging
+            logging.getLogger(__name__).warning("screenshot failed", exc_info=True)
+            return None
 
-    def _capture_and_ask(self, question: str):
-        hwnd = osapi.find_game_window()
-        if hwnd:
-            self.game_hwnd = hwnd
-            self.shot = self.shot_provider(hwnd) if self.shot_provider else osapi.capture_game(hwnd)
-            self.shot_used = False
-        self.setWindowOpacity(1.0)
-        self.ask(question)
+    def _step_aside(self, then):
+        """The chat is part of the screen: it hides for the shot and always comes back.
+        then(hwnd, shot) runs once it is back."""
+        self.setWindowOpacity(0.0)
+
+        def shoot():
+            try:
+                hwnd = osapi.find_game_window() or self.game_hwnd
+            except Exception:      # noqa: BLE001 - a failed lookup is just "no game"
+                hwnd = self.game_hwnd
+            shot = self._shoot(hwnd)          # never raises: the chat always comes back
+            self.setWindowOpacity(1.0)
+            then(hwnd, shot)
+        QTimer.singleShot(120, shoot)
+
+    def ask_with_screenshot(self, question: str):
+        """A fresh screenshot of the game, then the question, so the AI sees where the player is."""
+        def ask(hwnd, shot):
+            if hwnd:
+                self.game_hwnd, self.shot, self.shot_used = hwnd, shot, False
+            self.ask(question)
+        self._step_aside(ask)
 
     def what_now(self):
-        """'What now?': a fresh screenshot and the question, so Claude sees where the player is."""
-        self.setWindowOpacity(0.0)        # the chat is part of the screen: step aside for the shot
-        QTimer.singleShot(120, self._what_now_capture)
-
-    def _what_now_capture(self):
-        hwnd = osapi.find_game_window()
-        if hwnd:
-            self.game_hwnd = hwnd
-            self.shot = self.shot_provider(hwnd) if self.shot_provider else osapi.capture_game(hwnd)
-            self.shot_used = False
-        self.setWindowOpacity(1.0)
-        self.ask(self.t("what_now_q"))
+        self.ask_with_screenshot(self.t("what_now_q"))
 
     def character_menu(self):
         """Click the character card: pick another character or add one, right from the chat."""
@@ -535,12 +559,15 @@ class Overlay(QWidget):
             self.add_system(self.t("switched_character", name=c.name))
 
     def _on_text(self, text: str):
-        """The field follows what is being typed; send lights up only when there is something to send."""
+        """The field follows what is being typed; send lights up only when there is something to send.
+        Mid-answer it is the stop button."""
         d = bidi.direction(text) if text.strip() else ("rtl" if self.t.rtl else "ltr")
         self.input.setLayoutDirection(Qt.RightToLeft if d == "rtl" else Qt.LeftToRight)
         # absolute: in an RTL widget a plain AlignRight means "trailing" = left
         self.input.setAlignment((Qt.AlignRight if d == "rtl" else Qt.AlignLeft) | Qt.AlignAbsolute | Qt.AlignVCenter)
-        self.send_btn.setEnabled(bool(text.strip()) and not self.busy)
+        self.send_btn.setText(theme.ICON["stop" if self.busy else "send"])
+        self.send_btn.setToolTip(self.t("stop_answer") if self.busy else "")
+        self.send_btn.setEnabled(not self._stopping if self.busy else bool(text.strip()))
 
     # ------------------------------------------------------------------ geometry
 
@@ -565,15 +592,19 @@ class Overlay(QWidget):
         self.setGeometry(a.right() - w - 24, a.top() + 60, w, h)
 
     def save_geometry(self):
-        g = self.geometry()
+        g = self._target_geometry if self._target_geometry is not None else self.geometry()   # mid-grow: its real size
         self.settings["window"] = {"x": g.x(), "y": g.y(), "w": g.width(), "h": g.height()}
 
     # ------------------------------------------------------------------ show / hide
 
     def _materialize(self, show: bool, on_done=None):
         """The material arrives: opacity and a small scale settle together (critically damped, no bounce)."""
-        if self._anim:
+        if self._anim is not None and _alive(self._anim):
             self._anim.stop()           # interruptible: start from wherever it is now
+        if self._target_geometry is not None:
+            # a grow cut short: from the real size, or every quick F9 twice would shrink the window
+            self.setGeometry(self._target_geometry)
+            self._target_geometry = None
         g = self.geometry()
         small = QRect(g.x() + round(g.width() * 0.015), g.y() + round(g.height() * 0.015),
                       round(g.width() * 0.97), round(g.height() * 0.97))
@@ -593,10 +624,11 @@ class Overlay(QWidget):
             grow.setEndValue(g)
             grow.setEasingCurve(QEasingCurve.OutCubic)
             grp.addAnimation(grow)
+            grp.finished.connect(lambda: setattr(self, "_target_geometry", None))
         if on_done:
             grp.finished.connect(on_done)
         self._anim = grp
-        grp.start()
+        grp.start(QAbstractAnimation.DeleteWhenStopped)
 
     def open_overlay(self, shot: bytes | None, game_hwnd: int | None):
         self.shot, self.shot_used, self.game_hwnd = shot, False, game_hwnd
@@ -661,8 +693,7 @@ class Overlay(QWidget):
     def restore_from_bubble(self):
         self.bubble.hide()
         hwnd = osapi.find_game_window()
-        shot = self.shot_provider(hwnd) if self.shot_provider else None
-        self.open_overlay(shot, hwnd)
+        self.open_overlay(self._shoot(hwnd) if self.shot_provider else None, hwnd)
 
     def toggle(self, shot_provider):
         self.shot_provider = shot_provider
@@ -671,11 +702,12 @@ class Overlay(QWidget):
         else:
             self.bubble.hide()
             hwnd = osapi.find_game_window()
-            self.open_overlay(shot_provider(hwnd), hwnd)
+            self.open_overlay(self._shoot(hwnd), hwnd)
 
     def keyPressEvent(self, e):
-        # Esc deliberately does nothing: F9 or the window buttons close the chat.
+        # Esc stops an answer; it never closes the chat (F9 or the window buttons do).
         if e.key() == Qt.Key_Escape:
+            self.stop_answer()
             return
         super().keyPressEvent(e)
 
@@ -697,23 +729,20 @@ class Overlay(QWidget):
         self.shot_hint.show()
 
     def recapture(self):
-        # the chat is part of the screen: step aside for a moment so the shot shows the game
-        self.setWindowOpacity(0.0)
-        QTimer.singleShot(120, self._do_recapture)
+        self._step_aside(self._recaptured)
 
-    def _do_recapture(self):
-        hwnd = osapi.find_game_window() or self.game_hwnd
-        self.game_hwnd = hwnd
-        self.shot = osapi.capture_game(hwnd) if hwnd else None
-        self.shot_used = False
-        self.setWindowOpacity(1.0)
+    def _recaptured(self, hwnd, shot):
+        self.game_hwnd, self.shot, self.shot_used = hwnd, shot, False
         self.add_system("✓ " + self.t("recaptured") if self.shot else self.t("sync_no_game"))
         self._update_shot_hint()
 
     # ------------------------------------------------------------------ feed
 
+    MAX_ROWS = 150      # a long session keeps only the newest rows (the history window has every answer)
+
     def _add_widget(self, w: QWidget):
         self.feed_lay.insertWidget(self.feed_lay.count() - 1, w)
+        self._trim_feed()
         # new content fades in rather than popping
         eff = QGraphicsOpacityEffect(w)
         w.setGraphicsEffect(eff)
@@ -723,7 +752,22 @@ class Overlay(QWidget):
         a.setEndValue(1.0)
         a.setEasingCurve(QEasingCurve.OutCubic)
         a.finished.connect(lambda: w.setGraphicsEffect(None))
-        a.start()
+        a.start(QAbstractAnimation.DeleteWhenStopped)
+
+    def _trim_feed(self):
+        i = 0
+        while self.feed_lay.count() - 1 > self.MAX_ROWS:
+            w = self.feed_lay.itemAt(i).widget()
+            if self._pending_bubble is not None and w.isAncestorOf(self._pending_bubble):
+                if self.busy:
+                    i += 1              # the answer being written stays
+                    continue
+                self._pending_bubble = None
+            if w is self._anchor:
+                self._anchor = None
+            self.feed_lay.takeAt(i)
+            w.hide()
+            w.deleteLater()
 
     def clear_feed(self):
         self._anchor = None
@@ -866,7 +910,7 @@ class Overlay(QWidget):
         self._follow = True
         self._pending_bubble = self.add_bubble(self.t("thinking"), "assistant")
         self.busy = True
-        self.send_btn.setEnabled(False)
+        self._on_text(self.input.text())      # send turns into stop
 
         self._thread = QThread(self)
         self._worker = AskWorker(self.brain, question, c, history, shot, focus)
@@ -878,6 +922,9 @@ class Overlay(QWidget):
         self._pending_history = history
         self._worker.done.connect(self._on_done_main)
         self._worker.done.connect(self._thread.quit)
+        # one thread per question: both go once it ends
+        self._thread.finished.connect(self._worker.deleteLater)
+        self._thread.finished.connect(self._thread.deleteLater)
         self._thread.start()
         return True
 
@@ -970,9 +1017,27 @@ class Overlay(QWidget):
             self.scroll.verticalScrollBar().setValue(self._anchor_top())
 
     def _on_delta(self, text: str):
-        if self._pending_bubble and text:
-            self._pending_bubble.set_text(text)
+        if self._pending_bubble and text and not self._stopping:
+            self._delta_text = text
+            if not self._delta_timer.isActive():
+                self._delta_timer.start()
+
+    def _render_delta(self):
+        # the "?" beside game terms waits for the whole answer: annotating every token was the cost
+        if self._pending_bubble and self.busy and not self._stopping:
+            self._pending_bubble.set_text(_visible(self._delta_text), explain=False)
             QTimer.singleShot(0, self._keep_answer_readable)
+
+    def stop_answer(self):
+        """Stop (the send button mid-answer, or Esc): the AI stops and the chat is free again."""
+        if not self.busy or self._stopping:
+            return
+        self._stopping = True
+        self._delta_timer.stop()
+        if self._pending_bubble:
+            self._pending_bubble.set_text(self.t("answer_stopped"))
+        self._on_text(self.input.text())
+        self.brain.cancel()
 
     SYNC_QUESTION = ("[Profile sync, not a chat question] Look at the screenshot and read MY character's current "
                      "level, job and EXP bar percentage (the HUD shows them), and if the stat window is open, its "
@@ -982,21 +1047,16 @@ class Overlay(QWidget):
                      "and leave profile_update empty.")
 
     def sync_profile(self):
-        if self.busy or getattr(self, "_syncing", False):
+        if getattr(self, "_syncing", False):
+            return              # the read already running answers this request too
+        if self.busy:
+            self.sync_finished.emit(False)       # mid-answer: say so, or an EXP reading waits for it forever
             return
         self._syncing = True
         self.profile_card.set_busy(True, self.t("syncing"))
-        # the chat is opaque and on screen: step aside for the capture
-        self.setWindowOpacity(0.0)
-        QTimer.singleShot(120, self._sync_capture)
+        self._step_aside(self._sync_capture)
 
-    def _sync_capture(self):
-        try:
-            hwnd = osapi.find_game_window() or self.game_hwnd
-            shot = osapi.capture_game(hwnd) if hwnd else None
-        except Exception:      # noqa: BLE001 - a failed capture must not leave the button spinning forever
-            shot = None
-        self.setWindowOpacity(1.0)
+    def _sync_capture(self, _hwnd, shot):
         if not shot:
             self._syncing = False
             self.profile_card.set_busy(False)
@@ -1011,6 +1071,8 @@ class Overlay(QWidget):
         self._sync_thread.started.connect(self._sync_worker.run)
         self._sync_worker.done.connect(self._on_sync_done)      # bound method → runs on the GUI thread
         self._sync_worker.done.connect(self._sync_thread.quit)
+        self._sync_thread.finished.connect(self._sync_worker.deleteLater)
+        self._sync_thread.finished.connect(self._sync_thread.deleteLater)
         self._sync_thread.start()
 
     def _on_sync_done(self, ans: Answer):
@@ -1039,13 +1101,17 @@ class Overlay(QWidget):
 
     def _on_done(self, ans: Answer, history: History | None):
         self.busy = False
-        if self._pending_bubble is None:          # the feed was cleared meanwhile
-            self._pending_bubble = self.add_bubble("", "assistant")
+        stopped, self._stopping = self._stopping, False
+        self._delta_timer.stop()
         self._on_text(self.input.text())
         self._note_usage(ans.limits)
         self._read_limits_after_answer()
         if ans.model:
             self.settings["last_model"] = {**(self.settings["last_model"] or {}), self.settings["provider"]: ans.model}
+        if stopped:
+            return                  # the player stopped it: whatever came back is dropped
+        if self._pending_bubble is None:          # the feed was cleared meanwhile
+            self._pending_bubble = self.add_bubble("", "assistant")
         if ans.error:
             import logging
             logging.getLogger(__name__).warning("answer failed: %s", ans.error)

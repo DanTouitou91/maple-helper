@@ -8,10 +8,11 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from functools import cached_property
 from pathlib import Path
 
-from .store import ASSETS, kb_dir
+from .store import ASSETS, BUNDLED_KB, kb_dir
 
 FALLBACK_DIR = ASSETS / "fallback"
 CLASS_PICTURE_FALLBACK = {
@@ -47,6 +48,7 @@ def _norm(s: str) -> str:
 class KnowledgeBase:
     def __init__(self, root: Path | None = None):
         self.root = root or kb_dir()
+        self._drop_table_checked = False
         self.entities: dict[str, dict] = {}
         idx = self.root / "index.json"
         if idx.exists():
@@ -137,6 +139,8 @@ class KnowledgeBase:
         found: list[str] = []
         taken: list[tuple[int, int]] = []
         for name, key in self._names:
+            if name not in hay:
+                continue   # cheap: a prefixed occurrence contains the name too
             i = hay.find(f" {name} ")
             if i < 0 and HEBREW.search(name) and len(name) >= 4:
                 # Hebrew prefixes: ב/ל/מ/ה/ו/ש/כ glued to the word ("לחילזון", "בהנסיס")
@@ -154,18 +158,21 @@ class KnowledgeBase:
                 break
         return found
 
+    @cached_property
+    def _hebrew_aliases(self) -> list[tuple[str, str]]:
+        """(Hebrew alias, official name) longest-first."""
+        pairs = [(a, self.get(k)["name"]) for a, k in self.aliases.items() if HEBREW.search(a) and self.get(k)]
+        return sorted(pairs, key=lambda p: -len(p[0]))
+
     def resolve_names(self, text: str) -> str:
         """Replace Hebrew aliases/transliterations with official English names (used after speech-to-text)."""
         out = text
-        for alias, key in sorted(self.aliases.items(), key=lambda p: -len(p[0])):
-            if not HEBREW.search(alias):
+        for alias, name in self._hebrew_aliases:
+            if alias not in out:
                 continue
-            e = self.get(key)
-            if e:
-                # keep a glued Hebrew prefix: "ובלו סנייל" → "ו-Blue Snail"
-                name = e["name"]
-                out = re.sub(rf"(?<![֐-׿])([ובלמהשכ]{{0,2}}){re.escape(alias)}(?![֐-׿])",
-                             lambda m, n=name: f"{m.group(1)}-{n}" if m.group(1) else n, out)
+            # keep a glued Hebrew prefix: "ובלו סנייל" → "ו-Blue Snail"
+            out = re.sub(rf"(?<![֐-׿])([ובלמהשכ]{{0,2}}){re.escape(alias)}(?![֐-׿])",
+                         lambda m, n=name: f"{m.group(1)}-{n}" if m.group(1) else n, out)
         return out
 
     # ------------------------------------------------------------ drops
@@ -204,8 +211,11 @@ class KnowledgeBase:
             if e["category"] == "monster":
                 for ikey in self.monster_drops(mkey):
                     out.setdefault(ikey, []).append(mkey)
-        lvl = lambda k: (self.get(k).get("props") or {}).get("Level") or 999  # noqa: E731
-        return {i: sorted(ms, key=lvl) for i, ms in out.items()}
+        return {i: sorted(ms, key=self._level) for i, ms in out.items()}
+
+    def _level(self, key: str) -> float:
+        lv = (self.get(key).get("props") or {}).get("Level")
+        return lv if isinstance(lv, (int, float)) and lv else 999   # "?" or missing sorts last
 
     def drop_groups(self, item_keys: list[str], limit: int = 8) -> list[dict]:
         """Group items by the monsters that drop them: [{"monster": key, "items": [keys]}], by monster level."""
@@ -215,12 +225,20 @@ class KnowledgeBase:
                 groups.setdefault(m, [])
                 if i not in groups[m]:
                     groups[m].append(i)
-        lvl = lambda k: (self.get(k).get("props") or {}).get("Level") or 999  # noqa: E731
-        ordered = sorted(groups, key=lvl)[:limit]
+        ordered = sorted(groups, key=self._level)[:limit]
         return [{"monster": m, "items": groups[m]} for m in ordered]
 
     def ensure_drop_table(self) -> None:
-        """Write drops.tsv next to index.json so Claude can grep 'which monsters drop X' in one step."""
+        """Write drops.tsv next to index.json so Claude can grep 'which monsters drop X' in one step.
+
+        Releases ship it, so this fills in a fresh scrape; checked once per loaded KB. Never written into the
+        installed app (a signed macOS bundle, Program Files): without it the prompt's pre-fetched drop groups
+        still answer."""
+        if self._drop_table_checked:
+            return
+        self._drop_table_checked = True
+        if getattr(sys, "frozen", False) and self.root == BUNDLED_KB:
+            return
         path = self.root / "drops.tsv"
         idx = self.root / "index.json"
         try:
@@ -233,7 +251,9 @@ class KnowledgeBase:
                     me = self.get(m)
                     lv = (me.get("props") or {}).get("Level", "")
                     lines.append(f"{me['name']}\t{lv}\t{m}\t{it['name']}\t{it.get('type') or ''}\t{ikey}")
-            path.write_text("\n".join(lines), encoding="utf-8")
+            tmp = path.with_suffix(".tmp")       # Claude may grep it meanwhile: never a half-written table
+            tmp.write_text("\n".join(lines), encoding="utf-8")
+            tmp.replace(path)
         except OSError:
             pass
 

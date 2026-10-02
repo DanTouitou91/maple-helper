@@ -15,12 +15,11 @@ from PySide6.QtCore import QAbstractNativeEventFilter, QObject, Signal
 from PySide6.QtWidgets import QApplication, QWidget
 
 from . import APP_NAME
-from .capture import grab_image, grab_jpeg
+from .capture import grab_image, grab_jpeg, looks_like_game
 
 user32 = ctypes.windll.user32
 dwmapi = ctypes.windll.dwmapi
 
-GAME_TITLES = ("MapleStory Classic", "MapleStory", "Classic World")
 VK = {f"F{i}": 0x6F + i for i in range(1, 13)}   # F1=0x70 ... F12=0x7B
 APP_ID = "MapleHelper.App"
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
@@ -49,8 +48,7 @@ def find_game_window() -> int | None:
 
     def cb(hwnd, _):
         if user32.IsWindowVisible(hwnd) and not user32.IsIconic(hwnd):
-            t = _title(hwnd)
-            if any(g.lower() in t.lower() for g in GAME_TITLES) and "maple helper" not in t.lower():
+            if looks_like_game(_title(hwnd)):
                 found.append(hwnd)
         return True
 

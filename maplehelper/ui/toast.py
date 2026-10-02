@@ -117,7 +117,7 @@ class Toast(QWidget):
         self.dismiss()
 
     def paintEvent(self, e):
-        paint_glass(self, None, radius=18)
+        paint_glass(self, radius=18)
 
 
 def notify(title: str, message: str = "", rtl: bool = True, font_family: str | None = None, timeout_ms: int = 5000):

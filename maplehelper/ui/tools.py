@@ -3,10 +3,12 @@ quick checks (what to sell, what to buy). Everything reads the KB and the charac
 the game. The window is non-modal, so it can stay open beside the chat."""
 from __future__ import annotations
 
+import functools
 import html
 import math
 import re
 import time
+import weakref
 
 from PySide6.QtCore import QEvent, QPoint, QSize, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import QIcon, QPixmap, QStandardItem, QStandardItemModel
@@ -70,7 +72,7 @@ class EntityPicker(QLineEdit):
             item = QStandardItem(shown)
             item.setData(name, NAME_ROLE)
             if path:
-                item.setIcon(QIcon(QPixmap(str(path)).scaled(icon, icon, Qt.KeepAspectRatio, Qt.SmoothTransformation)))
+                item.setIcon(QIcon(str(path)))         # decoded when its row is first shown, not all up front
             item.setEditable(False)
             model.appendRow(item)
         comp = QCompleter(model, self)
@@ -139,6 +141,23 @@ def _bold_names(text: str) -> str:
     return text
 
 
+def _per_kb(fn):
+    """The rows depend only on the KB: built once per KB, so the window reopens instantly."""
+    cache = weakref.WeakKeyDictionary()
+
+    @functools.wraps(fn)
+    def rows(kb):
+        try:
+            return cache[kb]
+        except KeyError:
+            cache[kb] = out = fn(kb)
+            return out
+        except TypeError:          # a KB stand-in that can't be weakly referenced
+            return fn(kb)
+    return rows
+
+
+@_per_kb
 def monster_rows(kb) -> list[tuple[str, str, object]]:
     """Every monster once (the version that spawns on the most maps), lowest level first."""
     best: dict[str, combat.Monster] = {}
@@ -151,6 +170,7 @@ def monster_rows(kb) -> list[tuple[str, str, object]]:
             for m in sorted(best.values(), key=lambda m: (m.level, m.name))]
 
 
+@_per_kb
 def item_rows(kb) -> list[tuple[str, str, object]]:
     """Every item once, by name."""
     seen = {}
@@ -160,6 +180,7 @@ def item_rows(kb) -> list[tuple[str, str, object]]:
     return [(name, name, kb.picture(k)) for name, k in sorted(seen.items(), key=lambda x: x[0].lower())]
 
 
+@_per_kb
 def map_rows(kb) -> list[tuple[str, str, object]]:
     """Every reachable map with its minimap: hunting grounds by monster level, then towns and the rest."""
     rows = []
@@ -191,7 +212,7 @@ class ToolsDialog(GlassDialog):
         self.t = t = I18n(lang or "he")
         super().__init__(t("tools"), t.rtl)
         self.kb, self.profiles, self.settings, self.meter = kb, profiles, settings, exp_meter
-        self.setStyleSheet(stylesheet)
+        theme.apply(self, stylesheet)
         self.resize(580, 800)
         rtl = t.rtl
         outer = QVBoxLayout(self.content)
@@ -214,10 +235,10 @@ class ToolsDialog(GlassDialog):
         self.stack = QStackedWidget()
         outer.addWidget(self.stack, 1)
         self.pages = {}
-        for name in PAGES:
-            w = getattr(self, f"_page_{name}")()
-            self.pages[name] = w
-            self.stack.addWidget(w)
+        for _ in PAGES:
+            self.stack.addWidget(QWidget())        # a page is built the first time it opens
+        # a stepper held down changes a stat many times a second: save and redraw once it settles
+        self._save_soon = QTimer(self, singleShot=True, interval=250, timeout=self._save_now)
         rtl_buttons(self, rtl)
         self.show_page(PAGES.index(page) if page in PAGES else 0)
 
@@ -228,6 +249,14 @@ class ToolsDialog(GlassDialog):
         return self.profiles.active
 
     def show_page(self, i: int):
+        name = PAGES[i]
+        if name not in self.pages:
+            w = self.pages[name] = getattr(self, f"_page_{name}")()
+            rtl_buttons(w, self.t.rtl)
+            old = self.stack.widget(i)
+            self.stack.insertWidget(i, w)
+            self.stack.removeWidget(old)
+            old.deleteLater()
         self.nav.button(i).setChecked(True)
         self.stack.setCurrentIndex(i)
         self.refresh(PAGES[i])
@@ -250,7 +279,8 @@ class ToolsDialog(GlassDialog):
                 self._meter_reading()
             else:
                 self.meter.pop("pending")
-                self._set(self.exp_status, self.t("exp_failed"))
+                if "exp" in self.pages:        # a reading started in an earlier window: nothing to show it on
+                    self._set(self.exp_status, self.t("exp_failed"))
         self.refresh()
 
     def _read_screen(self):
@@ -341,9 +371,18 @@ class ToolsDialog(GlassDialog):
         if not c:
             return
         c.stats = {**(c.stats or {}), key: value} if value else {k: v for k, v in (c.stats or {}).items() if k != key}
+        self._save_soon.start()
+
+    def _save_now(self):
         self.profiles.save()
         self._load_stats()                      # the other page's copy follows
         self.refresh()
+
+    def hideEvent(self, e):
+        if self._save_soon.isActive():          # closed right after a change: it is saved all the same
+            self._save_soon.stop()
+            self.profiles.save()
+        super().hideEvent(e)
 
     def _stats(self):
         s = (self.c.stats if self.c else {}) or {}
@@ -399,11 +438,7 @@ class ToolsDialog(GlassDialog):
         pic = QLabel()
         pic.setFixedSize(52, 52)
         pic.setAlignment(Qt.AlignCenter)
-        path = self.kb.picture(m.key)
-        if path:
-            pm = QPixmap(str(path))
-            if not pm.isNull():
-                pic.setPixmap(pm.scaled(52, 52, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        pic.setPixmap(theme.thumb(self.kb.picture(m.key), 52))
         row.addWidget(pic, 0, Qt.AlignTop)
         col = QVBoxLayout()
         col.setSpacing(3)
@@ -701,9 +736,7 @@ class ToolsDialog(GlassDialog):
         npc.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
         uri = self._picture_uri("npc", q.npc) if q.npc else None
         if uri:
-            pm = QPixmap(QUrl(uri).toLocalFile())
-            if not pm.isNull():
-                npc.setPixmap(pm.scaled(52, 60, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            npc.setPixmap(theme.thumb(QUrl(uri).toLocalFile(), 52, 60))
         outer.addWidget(npc, 0, Qt.AlignTop)
         col = QVBoxLayout()
         col.setSpacing(4)
@@ -789,8 +822,7 @@ class ToolsDialog(GlassDialog):
         c = self.c
         if c:
             c.crafts = {**(c.crafts or {}), self._prof(): v}
-            self.profiles.save()
-        self._fill_crafting()
+        self._save_soon.start()
 
     def _fill_crafting(self):
         t, c = self.t, self.c
@@ -831,9 +863,7 @@ class ToolsDialog(GlassDialog):
         pic.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
         uri = self._picture_uri("npc", i.teacher) if i.teacher else None
         if uri:
-            pm = QPixmap(QUrl(uri).toLocalFile())
-            if not pm.isNull():
-                pic.setPixmap(pm.scaled(52, 60, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            pic.setPixmap(theme.thumb(QUrl(uri).toLocalFile(), 52, 60))
         outer.addWidget(pic, 0, Qt.AlignTop)
         col = QVBoxLayout()
         col.setSpacing(6)
@@ -862,9 +892,7 @@ class ToolsDialog(GlassDialog):
         pic.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
         uri = self._picture_uri("item", r.name)
         if uri:
-            pm = QPixmap(QUrl(uri).toLocalFile())
-            if not pm.isNull():
-                pic.setPixmap(pm.scaled(44, 44, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            pic.setPixmap(theme.thumb(QUrl(uri).toLocalFile(), 44))
         outer.addWidget(pic, 0, Qt.AlignTop)
         col = QVBoxLayout()
         col.setSpacing(4)
@@ -976,11 +1004,7 @@ class ToolsDialog(GlassDialog):
         pic = QLabel()
         pic.setFixedSize(48, 48)
         pic.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
-        path = self.kb.picture(key)
-        if path:
-            pm = QPixmap(str(path))
-            if not pm.isNull():
-                pic.setPixmap(pm.scaled(48, 48, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        pic.setPixmap(theme.thumb(self.kb.picture(key), 48))
         outer.addWidget(pic, 0, Qt.AlignTop)
         col = QVBoxLayout()
         col.setSpacing(6)

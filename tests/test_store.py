@@ -87,7 +87,7 @@ class TestHistory:
         with h.log.open("a", encoding="utf-8") as f:
             f.write("not json\n")
         recent = h.recent()
-        assert len(recent) == 19 and recent[-1]["text"] == "msg 24"
+        assert len(recent) == h.RECENT - 1 and recent[-1]["text"] == "msg 24"
 
     def test_summaries_roll_and_clear(self, isolated_store):
         h = isolated_store.History("abc")
@@ -117,3 +117,38 @@ def test_launch_waits_for_a_running_update(monkeypatch):
     assert setupwait.wait_for_setup(limit_s=5, step_s=0) is True
     monkeypatch.setattr(setupwait, "setup_running", lambda: False)
     assert setupwait.wait_for_setup(limit_s=5, step_s=0) is False
+
+
+class TestDurableFiles:
+    def test_a_torn_profiles_file_falls_back_to_the_previous_version(self, isolated_store):
+        p = isolated_store.Profiles()
+        p.add("Tal", "Warrior", "Warrior", 12)
+        p.add("Noa", "Thief", "Thief", 20)                  # the first save is kept as profiles.json.bak
+        path = isolated_store.Profiles.path
+        path.write_text('{"active": "x", "charac', encoding="utf-8")   # power loss mid-write
+        again = isolated_store.Profiles()
+        assert [c.name for c in again.characters] == ["Tal"]
+        assert path.with_name("profiles.json.corrupt").read_text(encoding="utf-8").startswith('{"active"')
+        again.save()                                         # the next save doesn't lose the backup's characters
+        assert [c.name for c in isolated_store.Profiles().characters] == ["Tal"]
+
+    def test_corrupt_without_a_backup_is_set_aside_not_overwritten(self, isolated_store):
+        path = isolated_store.Settings.path
+        path.write_text("\x00\x00\x00", encoding="utf-8")
+        s = isolated_store.Settings()
+        s["language"] = "en"
+        assert path.with_name("settings.json.corrupt").read_text(encoding="utf-8") == "\x00\x00\x00"
+        assert json.loads(path.read_text(encoding="utf-8"))["language"] == "en"
+
+    def test_writes_are_flushed_to_disk_before_the_swap(self, isolated_store, monkeypatch):
+        synced = []
+        monkeypatch.setattr(isolated_store.os, "fsync", lambda fd: synced.append(fd))
+        isolated_store.Settings()["language"] = "he"
+        assert synced and not isolated_store.Settings.path.with_suffix(".tmp").exists()
+
+    def test_clearing_history_removes_the_summary_backup(self, isolated_store):
+        h = isolated_store.History("abc")
+        h.add_summary("s1")
+        h.add_summary("s2")
+        h.clear()
+        assert not list(isolated_store.HISTORY_DIR.iterdir())

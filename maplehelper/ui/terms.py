@@ -16,7 +16,7 @@ from PySide6.QtWidgets import QLabel
 from .. import glossary
 from . import theme
 
-LANG = "he"          # the UI language; the chat sets it at start
+LANG = "he"          # the UI language; the chat keeps it current
 BADGE_PX = 15
 
 
@@ -116,14 +116,15 @@ def _hovered(link: str, lang: str):
         hide()
 
 
-def watch(label: QLabel, lang: str) -> QLabel:
-    """A rich-text label whose "?" links explain their term on hover and on click."""
+def watch(label: QLabel, lang: str | None = None) -> QLabel:
+    """A rich-text label whose "?" links explain their term on hover and on click.
+    No lang: the UI language at hover time (the chat's labels outlive a language switch)."""
     label.setTextFormat(Qt.RichText)
     label.setOpenExternalLinks(False)
     label.setMouseTracking(True)
     label.setTextInteractionFlags(Qt.LinksAccessibleByMouse)
-    label.linkHovered.connect(lambda link: _hovered(link, lang))
-    label.linkActivated.connect(lambda link: show(link, lang))
+    label.linkHovered.connect(lambda link: _hovered(link, lang or LANG))
+    label.linkActivated.connect(lambda link: show(link, lang or LANG))
     return label
 
 
