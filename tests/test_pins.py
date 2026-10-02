@@ -25,3 +25,9 @@ def test_conversations_and_search():
     assert [p["q"] for p in pairs] == ["where is Mano?", "מה Mano מפיל?"]
     assert [p["a"] for p in pins.search(pairs, "mano")] == ["Subi.", "Swamp."]     # newest first
     assert pins.search(pairs, "mano swamp") == [pairs[0]]
+
+
+def test_removing_without_a_character_keeps_the_settings_clean():
+    s = FakeSettings(pins={})
+    pins.remove(s, None, "a1")
+    assert None not in s["pins"]

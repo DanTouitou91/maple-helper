@@ -21,6 +21,10 @@ import time
 import zipfile
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))   # run as a script: maplehelper is the app package next to tools/
+
 REPO = "Amitaflalo1995/maple-helper"
 CATEGORIES = ["monster", "item", "map", "quest", "npc", "skill", "class", "guide", "shop", "crafting", "formula"]
 MIN_KEEP_RATIO = 0.9   # an update may not lose more than 10% of the previous entities
@@ -83,6 +87,14 @@ def _index(kb: Path) -> dict[str, dict]:
         return {}
 
 
+def write_drops(kb: Path) -> None:
+    """Rebuild drops.tsv from the KB's own pages. Only the app used to write it, so a packed KB carried a
+    stale table or none, and patch notes never saw a drop change."""
+    from maplehelper.kb import KnowledgeBase
+    (kb / "drops.tsv").unlink(missing_ok=True)      # the app's table is only rebuilt when missing or older
+    KnowledgeBase(kb).ensure_drop_table()
+
+
 def _drops(kb: Path) -> dict[str, dict[str, str]]:
     """monster key -> {item key: item name}"""
     out: dict[str, dict[str, str]] = {}
@@ -135,6 +147,9 @@ def diff_kb(old: Path, new: Path) -> dict:
 
 def record_changes(kb: Path, previous_kb: Path, version: str) -> dict | None:
     """Prepend this update's changes to kb/changelog.json (newest first). None when nothing changed."""
+    # both sides from the same builder: the published KB's table may be stale or missing too
+    write_drops(kb)
+    write_drops(previous_kb)
     d = diff_kb(previous_kb, kb)
     if not any(d["counts"].values()):
         return None
@@ -153,6 +168,7 @@ def record_changes(kb: Path, previous_kb: Path, version: str) -> dict | None:
 def pack(kb: Path, out: Path, version: str | None = None, previous_kb: Path | None = None) -> dict:
     """Stamp the version into meta.json, zip the KB (files at the zip root) and write the manifest."""
     version = version or time.strftime("%Y.%m.%d.%H%M", time.gmtime())
+    write_drops(kb)
     if previous_kb:
         record_changes(kb, previous_kb, version)
     meta_path = kb / "meta.json"

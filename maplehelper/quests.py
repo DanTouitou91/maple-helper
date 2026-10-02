@@ -3,8 +3,8 @@ what they pay. Done quests are kept per character (Character.quests_done)."""
 from __future__ import annotations
 
 import re
+import weakref
 from dataclasses import dataclass, field
-from functools import lru_cache
 
 WINDOW_BELOW = 12     # quests this many levels under you still show (cheap EXP you may have skipped)
 WINDOW_ABOVE = 4      # and these coming soon
@@ -38,14 +38,13 @@ def _section(lines: list[str], head: str, stops=("Pre-requisites", "Requirements
     return out
 
 
-_ITEM = re.compile(r"((?:Defeat |Collect )?[A-Z][^x]*?) x ([\d,]+)")
+# "Defeat Axe Stump x 25 Fox Tail x 10": a name runs up to " x <count>" followed by the next name or the end
+# (names have lowercase x's: Axe, Fox, Wax, Elixir)
+_ITEM = re.compile(r"((?:Defeat |Collect )?[A-Z].*?) x ([\d,]+)(?=\s+[A-Z]|\s*$)")
 
 
-@lru_cache(maxsize=1024)
 def _quest(kb, key: str) -> Quest | None:
     e = kb.get(key)
-    if not e or e.get("category") != "quest":
-        return None
     p = e.get("props") or {}
     lv = p.get("Minimum Level")
     if not isinstance(lv, (int, float)):
@@ -68,16 +67,37 @@ def _quest(kb, key: str) -> Quest | None:
 
 
 def quest(kb, key: str) -> Quest | None:
-    return _quest(kb, key)
+    return all_quests(kb).get(key)
+
+
+# every quest of a KB, parsed once per KB object (a reloaded KB is a new object: fresh quests)
+_QUESTS: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+
+
+def all_quests(kb) -> dict[str, Quest]:
+    """quest key -> Quest, for every quest page with a level."""
+    try:
+        return _QUESTS[kb]
+    except KeyError:
+        pass
+    except TypeError:          # a stand-in KB that can't be weakly referenced: read it every time
+        return _read_all(kb)
+    out = _QUESTS[kb] = _read_all(kb)
+    return out
+
+
+def _read_all(kb) -> dict[str, Quest]:
+    return {k: q for k, e in kb.entities.items() if e.get("category") == "quest" and (q := _quest(kb, k))}
 
 
 def job_fits(q: Quest, base_class: str, job: str) -> bool:
     if not q.job:
         return True
     j = q.job.lower()
-    if "beginner" in j:
-        return base_class == "Beginner"
-    return base_class.lower() in j or (job or "").lower() in j
+    # the job decides, not the class: a planned Warrior is still a Beginner until level 10
+    if (job or base_class) == "Beginner":
+        return "beginner" in j
+    return "beginner" not in j and (base_class.lower() in j or (job or "").lower() in j)
 
 
 def for_level(kb, level: int, base_class: str = "", job: str = "", done: list[str] | None = None) -> dict:
@@ -85,13 +105,8 @@ def for_level(kb, level: int, base_class: str = "", job: str = "", done: list[st
     "town": the citizenship donations (repeatable, 100 items each), "done": count}."""
     done_set = set(done or [])
     now, soon, town = [], [], []
-    for k, e in kb.entities.items():
-        if e.get("category") != "quest":
-            continue
-        q = quest(kb, k)
-        if not q or (base_class and not job_fits(q, base_class, job)):
-            continue
-        if k in done_set:
+    for k, q in all_quests(kb).items():
+        if k in done_set or (base_class and not job_fits(q, base_class, job)):
             continue
         if level - WINDOW_BELOW <= q.level <= level:
             (town if q.area == "Citizenship" else now).append(q)
@@ -123,10 +138,7 @@ def citizenship(kb, town: str, level: int, done: list[str] | None = None) -> lis
     """The town's citizenship quests (donations and the rest) you can do now, best EXP first."""
     done_set = set(done or [])
     out = []
-    for k, e in kb.entities.items():
-        if e.get("category") != "quest" or k in done_set:
-            continue
-        q = quest(kb, k)
-        if q and q.area == "Citizenship" and q.level <= level and town_of(kb, q) == town:
+    for k, q in all_quests(kb).items():
+        if k not in done_set and q.area == "Citizenship" and q.level <= level and town_of(kb, q) == town:
             out.append(q)
     return sorted(out, key=lambda q: (-q.exp, q.level))

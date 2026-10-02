@@ -25,10 +25,15 @@ def _he(words: str, the: bool = False) -> str:
 # ("how much / how many" is a plain number question, not a "how do I")
 NEEDS_CLAUDE = re.compile(
     r"\b(why|how(?!\s+(?:much|many)\b)|should|best|better|worth|recommend|my|me|i|here|this|that)\b|"
-    + _he("למה|איך|כדאי|הכי|עדיף|שווה|מומלץ|שלי|אני|פה|כאן|הזה|הזאת|זה|במסך|תמליץ|לי"), re.I)
+    + _he("למה|איך|כדאי|הכי|עדיף|שווה|מומלץ|שלי|אני|פה|כאן|הזה|הזאת|זה|במסך|תמליץ|לי") + "|"
+    # times, rates and "to level": a calculation, not a number on the page ("Red Snail EXP per hour" is not its EXP)
+    r"\b(when|time|respawns?|rate|per|hourly|hours?|hr|minutes?|level(?:ing)?\s+up|to\s+level|"
+    r"(?:level|lvl?)\.?\s*\d+)\b|"
+    + _he("מתי|זמן|ריספאון|רספאון|קצב|לשעה|בשעה|לדקה|בדקה|לעלות") + rf"|(?<![{HE}])[בל]?ה?(?:לבל|רמה)\s*\d", re.I)
 DROPS = re.compile(r"\b(drops?|loot)\b|(מפיל|מפילה|מפילים|דרופ|דרופים|נופל)", re.I)
 WHO = re.compile(r"\b(who|which (monster|mob)s?)\b|" + _he("מי|מאיפה") + "|איזה מפלצ|איפה משיגים", re.I)
-WHERE = re.compile(r"\b(where|location|spawn)\b|(איפה|באיזו מפה|באיזה מפה|מיקום)", re.I)
+# not "spawn": "Red Snail spawn" asks when as often as where
+WHERE = re.compile(r"\b(where|location)\b|(איפה|באיזו מפה|באיזה מפה|מיקום)", re.I)
 STATS = [  # (pattern, props key, label); Hebrew as whole words: "לבלו סנייל" (Blue Snail) is not "לבל"
     (re.compile(r"\bhp\b|" + _he("חיים|אייץ' פי", the=True), re.I), "HP", "HP"),
     (re.compile(r"\bmp\b|" + _he("מאנה|מנה", the=True), re.I), "MP", "MP"),
@@ -40,6 +45,7 @@ STATS = [  # (pattern, props key, label); Hebrew as whole words: "לבלו סנ�
     (re.compile(r"\b(att|attack|damage)\b|" + _he("נזק|התקפה", the=True), re.I), "Physical Damage", "Damage"),
 ]
 MAX_WORDS = 9
+POSSESSIVE = re.compile(r"(?<=\w)['’]s\b", re.I)
 
 
 def answer(question: str, kb: KnowledgeBase, t) -> Answer | None:
@@ -47,7 +53,8 @@ def answer(question: str, kb: KnowledgeBase, t) -> Answer | None:
     q = question.strip()
     if not q or len(q.split()) > MAX_WORDS or NEEDS_CLAUDE.search(q):
         return None
-    keys = kb.find_mentions(q, max_results=3)
+    # "Red Snail's HP": the name lookup wants whole words; the original first, for names like "Drake's Blood"
+    keys = kb.find_mentions(q, max_results=3) or kb.find_mentions(POSSESSIVE.sub("", q), max_results=3)
     if len(keys) != 1:
         return None          # nothing named, or several things: a judgement call
     key = keys[0]
@@ -76,7 +83,7 @@ def answer(question: str, kb: KnowledgeBase, t) -> Answer | None:
             return None
         return Answer(text=t("quick_where", name=name) + "\n" + "\n".join(f"• {m}" for m in maps), entities=[key])
     props = e.get("props") or {}
-    asked = [(k, label) for rx, k, label in STATS if rx.search(q) and props.get(k) not in (None, "")]
-    if asked:
-        return Answer(text="\n".join(f"{name} · {label}: {props[k]}" for k, label in asked), entities=[key])
-    return None
+    asked = [(k, label) for rx, k, label in STATS if rx.search(q)]
+    if not asked or any(props.get(k) in (None, "") for k, _ in asked):
+        return None          # one of the numbers asked isn't in the KB: half an answer would look whole
+    return Answer(text="\n".join(f"{name} · {label}: {props[k]}" for k, label in asked), entities=[key])

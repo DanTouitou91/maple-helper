@@ -14,7 +14,7 @@ def version_tuple(v: str) -> tuple[int, ...]:
     for part in str(v).split("."):
         digits = "".join(ch for ch in part if ch.isdigit())
         out.append(int(digits) if digits else 0)
-    return tuple(out)
+    return tuple(out + [0] * (3 - len(out)))      # "1.0" is "1.0.0", not older than it
 
 
 def load() -> list[dict]:

@@ -10,6 +10,7 @@ import html
 import json
 import re
 from dataclasses import dataclass, field
+from functools import lru_cache
 
 from . import bidi
 from .store import ASSETS
@@ -236,8 +237,12 @@ def _load(path) -> dict | None:
 def book(key: str, lang: str) -> dict | None:
     """The full guide in the player's language (English when there's no translation), or None when
     this guide wasn't built. Adds "lang" (the language of the text) and "stale" (the English changed
-    since the translation)."""
-    slug = key.split("/", 1)[1]
+    since the translation). Shared between callers: read it, don't change it."""
+    return _book(key.split("/", 1)[1], lang)
+
+
+@lru_cache(maxsize=128)   # shipped with the app, never changes while it runs; the build plan reads each twice
+def _book(slug: str, lang: str) -> dict | None:
     en = _load(TRANSLATIONS / "en" / f"{slug}.json")
     if not en:
         return None

@@ -125,22 +125,16 @@ def info(kb, profession: str) -> Info:
     from . import combat, quests
     out = Info()
     word = MASTER_WORD.get(profession, "")
-    for k, e in kb.entities.items():
-        if e.get("category") != "quest":
-            continue
-        q = quests.quest(kb, k)
-        if not q or q.area != "Crafting":
-            continue
-        if word and e["name"].startswith(f"A {word} in My Own Right") or e["name"].startswith(f"An {word} in My Own Right"):
-            out.master_quest, out.master_level, out.teacher = e["name"], q.level, q.npc
+    crafting = [q for q in quests.all_quests(kb).values() if q.area == "Crafting"]
+    for q in crafting:
+        if word and q.name.startswith(f"A {word} in My Own Right") or q.name.startswith(f"An {word} in My Own Right"):
+            out.master_quest, out.master_level, out.teacher = q.name, q.level, q.npc
     if out.teacher:
         out.teacher_key = kb._npc_by_name.get(out.teacher.lower(), "")
         out.teacher_town = _town(kb, out.teacher_key) if out.teacher_key else ""
         # the first lesson: "<teacher> in Need of an Apprentice", else the teacher's lowest crafting quest
-        mine = [(q.level or 0, e["name"] != f"{out.teacher} in Need of an Apprentice", e["name"], q.level)
-                for k, e in kb.entities.items() if e.get("category") == "quest"
-                for q in [quests.quest(kb, k)] if q and q.area == "Crafting" and q.npc == out.teacher
-                and e["name"] != out.master_quest]
+        mine = [(q.level or 0, q.name != f"{out.teacher} in Need of an Apprentice", q.name, q.level)
+                for q in crafting if q.npc == out.teacher and q.name != out.master_quest]
         if mine:
             _, _, out.start_quest, out.start_level = min(mine, key=lambda m: (m[1], m[0]))
     out.station = STATIONS.get(profession, "")

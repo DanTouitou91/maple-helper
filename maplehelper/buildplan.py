@@ -73,7 +73,9 @@ def tables(kb, base_class: str, job: str, level: int, lang: str) -> tuple[str | 
     picked = []
     for kind, _ in KINDS:
         mine = [(t, r) for t, r in out if t.kind == kind]
-        fits = [t for t, r in mine if not r or r[0] <= level <= r[1]]
+        # at a boundary ("levels 1-10" and "levels 10-30" at level 10) only the upcoming one, starting here
+        start = max((r[0] for _, r in mine if r and r[0] <= level <= r[1]), default=None)
+        fits = [t for t, r in mine if not r or r[0] == start and level <= r[1]]
         if not fits:
             reached = [(r[1], t) for t, r in mine if r and r[0] <= level]
             fits = [max(reached, key=lambda x: x[0])[1]] if reached else [t for t, _ in mine[:1]]

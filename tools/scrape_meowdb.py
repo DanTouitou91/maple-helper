@@ -213,8 +213,8 @@ def scrape_one(category: str, slug: str, url: str, refresh: bool) -> dict | None
     img_file = None
     img_path = KB / "img" / category / f"{slug}.png"
     if not img_path.exists() or refresh:
-        for url in image_candidates(entity, category, slug, name):
-            data = fetch(url, binary=True)
+        for img_url in image_candidates(entity, category, slug, name):
+            data = fetch(img_url, binary=True)
             time.sleep(DELAY_SECONDS / 2)
             if data and save_image(data, img_path):
                 break

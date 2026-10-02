@@ -163,3 +163,39 @@ def test_pack_with_previous_kb_ships_the_patch_notes(kb_copy, tmp_path):
     with zipfile.ZipFile(tmp_path / "d" / "kb.zip") as z:
         log = json.loads(z.read("changelog.json"))
     assert log[0]["version"] == m["version"] and log[0]["counts"]["added"] == 1
+
+
+def _add_drop(kb, item):
+    # monster pages list their drops by item name under "Drops (MS Classic)"
+    page = kb / "pages" / "monster" / "130101.md"
+    page.write_text(page.read_text(encoding="utf-8") + f"Drops (MS Classic)\n{item}\nMap Locations\n", encoding="utf-8")
+
+
+def test_drop_changes_reach_the_patch_notes_without_a_drop_table(kb_copy, tmp_path):
+    # CI never runs the app, so neither KB has a drops.tsv: the pipeline builds both from the pages
+    import shutil
+    old = tmp_path / "old"
+    shutil.copytree(kb_copy, old)
+    _add_drop(kb_copy, "Red Potion")
+    entry = kb_release.record_changes(kb_copy, old, "2026.10.03.0100")
+    assert entry["counts"]["changed"] == 1
+    c = entry["changed"][0]
+    assert c["key"] == "monster/130101" and c["drops_added"] == ["Red Potion"] and "props" not in c
+
+
+def test_stale_drop_tables_are_rebuilt_before_diffing(kb_copy, tmp_path):
+    # a table left over from another KB must not show up as drop changes
+    import shutil
+    old = tmp_path / "old"
+    shutil.copytree(kb_copy, old)
+    _drops(old, [("Red Snail", "monster/130101", "Snail Shell", "item/1")])
+    assert kb_release.record_changes(kb_copy, old, "2026.10.03.0100") is None
+
+
+def test_pack_ships_a_fresh_drop_table(kb_copy, tmp_path):
+    _add_drop(kb_copy, "Red Potion")
+    (kb_copy / "drops.tsv").write_text("stale", encoding="utf-8")
+    kb_release.pack(kb_copy, tmp_path / "d", version="2026.10.03.0100")
+    with zipfile.ZipFile(tmp_path / "d" / "kb.zip") as z:
+        rows = z.read("drops.tsv").decode("utf-8").splitlines()
+    assert rows[1].split("\t") == ["Red Snail", "4", "monster/130101", "Red Potion", "", "item/2000000"]

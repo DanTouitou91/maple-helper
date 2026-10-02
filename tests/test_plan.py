@@ -18,12 +18,38 @@ def char(**kw):
 
 @pytest.mark.parametrize("base,job,level,expected", [
     ("Thief", "Thief", 29, (["Assassin", "Bandit"], 30)),
-    ("Thief", "Assassin", 34, (["Hermit", "Chief Bandit"], 70)),
+    ("Magician", "Magician", 8, (["F/P Wizard", "I/L Wizard", "Cleric"], 30)),
+    ("Thief", "Assassin", 34, None),                     # 3rd job is not in the launch build
     ("Magician", "F/P Mage", 80, None),
     ("Beginner", "Beginner", 7, (["Warrior", "Magician", "Bowman", "Thief"], 10)),
+    ("Beginner", "Beginner", 14, (["Warrior", "Magician", "Bowman", "Thief"], 10)),   # still hasn't advanced
+    ("Warrior", "Beginner", 5, (["Warrior"], 10)),       # planned Warrior, still a Beginner
 ])
 def test_next_job(base, job, level, expected):
     assert plan.next_job(base, job, level) == expected
+
+
+@pytest.mark.parametrize("base,job,third", [
+    ("Warrior", "Fighter", "Crusader"), ("Warrior", "Page", "White Knight"), ("Magician", "F/P Wizard", "F/P Mage"),
+    ("Magician", "Cleric", "Priest"), ("Thief", "Assassin", "Hermit"), ("Bowman", "Crossbowman", "Sniper"),
+])
+def test_a_2nd_job_leads_to_its_own_3rd_job(monkeypatch, base, job, third):
+    from maplehelper import jobs
+    monkeypatch.setattr(jobs, "THIRD_JOB_OPEN", True)
+    assert plan.next_job(base, job, 65) == ([third], 70)
+
+
+def test_every_2nd_job_has_a_3rd_job_in_its_own_class():
+    from maplehelper import jobs
+    for tree in jobs.JOBS.values():
+        for job, lv in tree:
+            if lv == 30:
+                assert (jobs.THIRD_JOB[job], 70) in tree, job
+
+
+def test_no_job_tip_for_3rd_job_before_it_is_in_the_game():
+    tip = plan.tip(fake_kb(), char(job="Assassin", level=69), t)
+    assert tip is None or tip.kind != "job"
 
 
 GRIND = """Level 31-35

@@ -10,6 +10,8 @@ import re
 from dataclasses import dataclass, field
 from functools import lru_cache
 
+from . import jobs
+
 EXP_GUIDE = "guide/exp-table-level-1-to-100"
 GRIND_GUIDE = "guide/best-grind-maps-every-level"
 # main stat first; the second only as much as gear and accuracy need
@@ -123,11 +125,14 @@ def progress(kb, level: int, exp_pct: float | None) -> dict | None:
 
 
 def next_job(base_class: str, job: str, level: int) -> tuple[list[str], int] | None:
-    """The next advancement: (job names to choose from, level), or None at the end of the tree."""
-    from .ui.dialogs import JOBS
-    tree = JOBS.get(base_class, [])
+    """The next advancement: (job names to choose from, level), or None at the end of what the game has."""
     if base_class == "Beginner":
-        return (["Warrior", "Magician", "Bowman", "Thief"], 10) if level < 10 else None   # Magician from 8
+        # still a Beginner however high the level: every 1st job opens at 10 in Classic World
+        return [c for c in jobs.JOBS if c != "Beginner"], 10
+    tree = jobs.JOBS.get(base_class, [])
+    if job in jobs.THIRD_JOB:
+        third = jobs.THIRD_JOB[job]
+        return ([third], next(lv for j, lv in tree if j == third)) if jobs.THIRD_JOB_OPEN else None
     current = next((lv for j, lv in tree if j == job), 0)
     later = sorted({lv for _, lv in tree if lv > current})
     if not later:
@@ -162,8 +167,8 @@ def tip(kb, c, t, dismissed: dict | None = None) -> Tip | None:
 
     nxt = next_job(c.base_class, c.job, c.level)
     if nxt and fresh("job") and nxt[1] - JOB_SOON <= c.level < nxt[1] + 3:
-        jobs, lv = nxt
-        names = " / ".join(jobs)
+        choices, lv = nxt
+        names = " / ".join(choices)
         key = "tip_job_now" if c.level >= lv else "tip_job_soon"
         return Tip("job", key, {"n": lv - c.level, "jobs": names, "level": lv},
                    t("tip_job_q", jobs=names, level=lv))

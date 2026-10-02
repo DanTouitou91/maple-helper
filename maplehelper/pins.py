@@ -23,7 +23,7 @@ def add(settings, cid: str | None, question: str, answer: str, now: float | None
 
 def remove(settings, cid: str | None, answer: str) -> None:
     data = dict(settings["pins"] or {})
-    data[cid] = [p for p in data.get(cid or "", []) if p.get("a") != answer]
+    data[cid or ""] = [p for p in data.get(cid or "", []) if p.get("a") != answer]
     settings["pins"] = data
 
 

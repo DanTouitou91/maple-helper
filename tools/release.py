@@ -65,6 +65,7 @@ def record_patch_notes(version: str) -> None:
 
 def build_kb(patch_notes: bool = False) -> tuple[Path, Path]:
     version = time.strftime("%Y.%m.%d.%H%M", time.gmtime())   # UTC, like kb_release.pack
+    kb_release.write_drops(KB)     # shipped fresh, so players' patch notes and wishlist alerts see drop changes
     if patch_notes:
         record_patch_notes(version)
     meta = json.loads((KB / "meta.json").read_text(encoding="utf-8")) if (KB / "meta.json").exists() else {}

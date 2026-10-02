@@ -71,3 +71,42 @@ def test_two_questions_in_one_go_to_claude(kb):
     # answering only the drops of "level and drops" would look like the whole answer
     assert quick.answer("Red Snail level and drops", kb, t) is None
     assert quick.answer("where is Red Snail and what's its HP", kb, t) is None
+
+
+@pytest.mark.parametrize("q", [
+    "When does Red Snail spawn?",
+    "Red Snail spawn time",
+    "Red Snail respawn",
+    "How many Red Snail to level up",
+    "Red Snail exp per hour",
+    "Red Snail exp at level 10",
+    "how many Red Snail for level 10",
+    "מתי רד סנייל עושה ספאון?",
+    "כמה רד סנייל צריך כדי לעלות לבל?",
+    "כמה אקספי לשעה ברד סנייל?",
+    "כמה אקספי נותן רד סנייל בלבל 10?",
+])
+def test_times_rates_and_levelling_go_to_claude(kb, q):
+    # the page's EXP or level is not "per hour" or "to level up": those need the player's numbers
+    assert quick.answer(q, kb, t) is None
+
+
+def test_where_still_lists_the_maps(kb):
+    ans = quick.answer("Where does Red Snail spawn?", kb, t)
+    assert ans and "Henesys Hunting Ground I" in ans.text
+
+
+@pytest.mark.parametrize("q,expected", [
+    ("Red Snail's HP", "HP: 45"),
+    ("What is Red Snail's level?", "Level: 4"),
+    ("Red Snail’s EXP", "EXP: 8"),
+])
+def test_possessive_names_are_found(kb, q, expected):
+    ans = quick.answer(q, kb, t)
+    assert ans and ans.text.endswith(expected) and ans.entities == ["monster/130101"]
+
+
+def test_a_missing_stat_is_not_half_answered(kb):
+    # the fixture has no MP: "HP and MP" answered with HP alone would look like the whole answer
+    assert quick.answer("Red Snail HP and MP", kb, t) is None
+    assert "HP: 45" in quick.answer("Red Snail HP and EXP", kb, t).text

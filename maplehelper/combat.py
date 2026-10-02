@@ -12,8 +12,8 @@ from __future__ import annotations
 
 import math
 import re
+import weakref
 from dataclasses import dataclass, field
-from functools import lru_cache
 
 # base accuracy per class: Common = 1.2 x DEX + 2 x Level + 0.6 x LUK
 ACC_DIVISOR = {"Beginner": (2.5, 5), "Warrior": (2.5, 10), "Bowman": (4.8, 20), "Thief": (4.0, 15)}
@@ -83,25 +83,43 @@ def _maps(page: str, n: int = 4) -> list[tuple[str, int]]:
 
 
 def monster(kb, key: str) -> Monster | None:
-    return _monster(kb, key)
-
-
-@lru_cache(maxsize=512)
-def _monster(kb, key: str) -> Monster | None:
-    e = kb.get(key)
-    if not e or e.get("category") != "monster":
-        return None
-    p = e.get("props") or {}
-    lines = kb.page(key).splitlines()
-    level, hp, exp = p.get("Level"), p.get("HP"), p.get("EXP")
-    if not all(isinstance(v, (int, float)) for v in (level, hp, exp)) or hp <= 0:
-        return None
-    return Monster(key, e["name"], int(level), int(hp), int(exp), _after(lines, "AVOID") or 0,
-                   _after(lines, "P.DEF") or 0, _after(lines, "M.DEF") or 0, _maps(kb.page(key)))
+    return _by_key(kb).get(key)
 
 
 def monsters(kb) -> list[Monster]:
-    return [m for k, e in kb.entities.items() if e.get("category") == "monster" and (m := monster(kb, k))]
+    return list(_by_key(kb).values())
+
+
+# every monster of a KB, read once per KB object: a reloaded KB is a new object (fresh numbers) and the
+# old one's go with it. An LRU keyed on (kb, key) kept old KBs alive and missed on every pass once full
+_MONSTERS: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+
+
+def _by_key(kb) -> dict[str, Monster]:
+    try:
+        return _MONSTERS[kb]
+    except KeyError:
+        pass
+    except TypeError:          # a stand-in KB that can't be weakly referenced: read it every time
+        return _read_all(kb)
+    out = _MONSTERS[kb] = _read_all(kb)
+    return out
+
+
+def _read_all(kb) -> dict[str, Monster]:
+    return {k: m for k, e in kb.entities.items() if e.get("category") == "monster" and (m := _monster(kb, k))}
+
+
+def _monster(kb, key: str) -> Monster | None:
+    e = kb.get(key)
+    p = e.get("props") or {}
+    level, hp, exp = p.get("Level"), p.get("HP"), p.get("EXP")
+    if not all(isinstance(v, (int, float)) for v in (level, hp, exp)) or hp <= 0:
+        return None
+    page = kb.page(key)
+    lines = page.splitlines()
+    return Monster(key, e["name"], int(level), int(hp), int(exp), _after(lines, "AVOID") or 0,
+                   _after(lines, "P.DEF") or 0, _after(lines, "M.DEF") or 0, _maps(page))
 
 
 # ------------------------------------------------------------------ accuracy
@@ -158,9 +176,10 @@ def level_scale(player_level: int, mob_level: int) -> float:
     return 1 / (1 + gap * gap * 0.005) if gap < 10 else 1 / (1 + gap * 0.05)
 
 
-def landed(raw: float, defense: int, player_level: int, mob_level: int) -> float:
-    """A hit's damage on this monster: defense, then the higher-level penalty."""
-    return max(1.0, raw * 100 / (defense + 100) * level_scale(player_level, mob_level))
+def landed(raw: float, defense: int, player_level: int, mob_level: int) -> int:
+    """A hit's damage on this monster: defense, then the higher-level penalty, then the game's last step
+    trunc(clamp(value, 1, 99,999)) (13 raw on DEF 10 lands 11.8 -> 11, not 11.8)."""
+    return int(min(99999.0, max(1.0, raw * 100 / (defense + 100) * level_scale(player_level, mob_level))))
 
 
 def hits_to_kill(dmg_min: int, dmg_max: int, m: Monster, player_level: int, magic: bool = False) -> tuple[int, float]:

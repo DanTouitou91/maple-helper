@@ -18,3 +18,9 @@ def test_since_shows_only_unseen_versions_up_to_the_running_one(monkeypatch):
 
 def test_versions_compare_as_numbers_not_text():
     assert whatsnew.version_tuple("0.10.0") > whatsnew.version_tuple("0.9.0")
+
+
+def test_a_short_version_equals_its_padded_form(monkeypatch):
+    assert whatsnew.version_tuple("1.0") == whatsnew.version_tuple("1.0.0")
+    monkeypatch.setattr(whatsnew, "load", lambda: [{"version": "1.0.0", "he": ["x"], "en": ["x"]}])
+    assert whatsnew.since("1.0", "1.0.0") == []          # seen as "1.0": nothing new
