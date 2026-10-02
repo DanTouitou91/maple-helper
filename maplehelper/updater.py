@@ -16,9 +16,11 @@ import zipfile
 
 from .store import USER_KB, kb_dir
 
-# Set when the GitHub repository exists (see README, "Publishing").
-GITHUB_REPO = "Amitaflalo1995/maple-helper"
-MANIFEST_URL = f"https://github.com/{GITHUB_REPO}/releases/latest/download/kb-manifest.json" if GITHUB_REPO else ""
+# App updates come from this fork's own releases only: without a release here, nothing replaces local changes.
+APP_REPO = "DanTouitou91/maple-helper"
+# The knowledge base is game data (no code), so it keeps following the original project's releases.
+KB_REPO = "Amitaflalo1995/maple-helper"
+MANIFEST_URL = f"https://github.com/{KB_REPO}/releases/latest/download/kb-manifest.json" if KB_REPO else ""
 
 
 def local_version() -> str:
@@ -129,7 +131,7 @@ def _published_sha256(rel: dict, name: str) -> str | None:
 
 
 def _latest_release() -> dict | None:
-    raw = _get(f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest", timeout=15) if GITHUB_REPO else None
+    raw = _get(f"https://api.github.com/repos/{APP_REPO}/releases/latest", timeout=15) if APP_REPO else None
     try:
         rel = json.loads(raw) if raw else None
     except json.JSONDecodeError:
@@ -144,7 +146,7 @@ def newer_release(current: str) -> tuple[str, str] | None:
     rel = _latest_release()
     if not rel or _version_tuple(rel.get("tag_name", "")) <= _version_tuple(current):
         return None
-    return rel["tag_name"].lstrip("v"), rel.get("html_url") or f"https://github.com/{GITHUB_REPO}/releases/latest"
+    return rel["tag_name"].lstrip("v"), rel.get("html_url") or f"https://github.com/{APP_REPO}/releases/latest"
 
 
 def _download(url: str, progress=None, timeout: int = 600) -> bytes | None:
