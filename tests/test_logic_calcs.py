@@ -115,7 +115,8 @@ def test_monster_page_numbers_and_grind_maps(play_kb):
     m = combat.monster(KnowledgeBase(play_kb), "monster/5130104")
     assert (m.level, m.hp, m.exp, m.avoid, m.pdef, m.mdef) == (17, 371, 32, 8, 30, 0)
     # job-test and not-yet-released maps are left out; the change-history table below is not a map
-    assert m.maps == [("Dangerous Valley II Victoria Road", 21), ("Burnt Land I Victoria Road", 12)]
+    # the region glued onto each map's name goes (no map entities here: by the known regions)
+    assert m.maps == [("Dangerous Valley II", 21), ("Burnt Land I", 12)]
 
 
 def test_a_reloaded_kb_reads_fresh_numbers_and_frees_the_old_one(play_kb):

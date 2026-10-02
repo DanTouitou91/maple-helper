@@ -31,6 +31,25 @@ def test_resolve_names_after_speech_to_text(kb):
     assert kb.resolve_names("אבגדהנסיסים") == "אבגדהנסיסים"
 
 
+def test_map_name_drops_the_region_the_scrape_glued_on(kb):
+    """The "Map Locations" cell is "<map> <region>": the known map name wins, else a known region goes."""
+    assert kb.map_name("Henesys Victoria Road") == "Henesys"
+    assert kb.map_name("Henesys") == "Henesys"
+    assert kb.map_name("Thicket Around the Beach III Victoria Road") == "Thicket Around the Beach III"
+    assert kb.map_name("Orbis Tower <9th Floor> Orbis") == "Orbis Tower <9th Floor>"
+    assert kb.map_name("Line 1 <Area 2> Kerning City Subway") == "Line 1 <Area 2>"
+    assert kb.map_name("Somewhere New") == "Somewhere New"          # nothing to go by: kept whole
+    assert kb.map_name("Henesys Hunting Ground I") == "Henesys Hunting Ground I"     # not cut after "Henesys"
+
+
+def test_top_maps_are_map_names(kb_copy):
+    from maplehelper.kb import KnowledgeBase
+    page = kb_copy / "pages" / "monster" / "130101.md"
+    page.write_text(page.read_text(encoding="utf-8").replace("Snail Garden |", "Snail Garden Hidden Street |"),
+                    encoding="utf-8")
+    assert KnowledgeBase(kb_copy)._top_maps("monster/130101")[1] == "Snail Garden"
+
+
 def test_page_body_strips_front_matter(kb):
     body = kb.page_body("monster/130101")
     assert body.startswith("# Red Snail") and "---" not in body[:5]

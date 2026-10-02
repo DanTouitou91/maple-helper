@@ -18,6 +18,16 @@ def test_stat_question_is_answered_from_the_kb(kb):
     assert ans and f"HP: {e['props']['HP']}" in ans.text and ans.entities == [key]
 
 
+def test_stat_numbers_have_thousands_separators_like_the_cards(kb):
+    props = kb.get("monster/130101")["props"]
+    props.update(HP=7420, EXP=1250.0)
+    assert quick.answer("Red Snail HP", kb, t).text == "Red Snail · HP: 7,420"
+    assert quick.answer("Red Snail EXP", kb, t).text == "Red Snail · EXP: 1,250"
+    pytest.importorskip("PySide6")
+    from maplehelper.ui.widgets import EntityCard
+    assert EntityCard._stats(kb.get("monster/130101"), False) == "Level: 4 · HP: 7,420 · EXP: 1,250"   # its card
+
+
 def test_hebrew_stat_question(kb):
     key = first_monster(kb)
     e = kb.get(key)

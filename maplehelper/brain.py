@@ -107,7 +107,9 @@ def build_prompt(question: str, character: Character | None, history: History | 
         if recent and recent[-1].get("role") == "user" and str(recent[-1].get("text", "")).endswith(question):
             recent = recent[:-1]     # the chat logs the question before asking: it comes once, in <question>
         if recent:
-            convo = "\n".join(f"{'Player' if r['role'] == 'user' else 'Helper'}: {r['text'][:600]}" for r in recent)
+            # the helper's own answers are the long part: their start carries the thread
+            convo = "\n".join(f"Player: {r['text'][:600]}" if r["role"] == "user" else f"Helper: {r['text'][:400]}"
+                               for r in recent)
             parts.append(f"<recent_conversation>\n{convo}\n</recent_conversation>")
     ctx = []
     if character:

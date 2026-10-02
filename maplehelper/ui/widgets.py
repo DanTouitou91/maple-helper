@@ -7,7 +7,7 @@ from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QVBoxLayout, QWidget
 
-from .. import bidi
+from .. import bidi, quick
 from ..kb import KnowledgeBase
 from . import theme
 
@@ -354,7 +354,7 @@ class EntityCard(Selectable, QFrame):
         for k in ("Level", "HP", "EXP", "Required Level", "Attack", "Weapon Attack", "Magic Attack", "Defense"):
             if k in props and props[k] not in (None, "", 0):
                 label = {"Level": "לבל", "Required Level": "לבל נדרש"}.get(k, k) if he else k
-                bits.append(f"{label}: {props[k]}")
+                bits.append(f"{label}: {quick.number(props[k])}")
             if len(bits) >= 3:
                 break
         return " · ".join(bits)

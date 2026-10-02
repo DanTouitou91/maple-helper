@@ -18,12 +18,13 @@ def char(**kw):
 
 @pytest.mark.parametrize("base,job,level,expected", [
     ("Thief", "Thief", 29, (["Assassin", "Bandit"], 30)),
-    ("Magician", "Magician", 8, (["F/P Wizard", "I/L Wizard", "Cleric"], 30)),
+    ("Magician", "Magician", 10, (["F/P Wizard", "I/L Wizard", "Cleric"], 30)),
     ("Thief", "Assassin", 34, None),                     # 3rd job is not in the launch build
     ("Magician", "F/P Mage", 80, None),
     ("Beginner", "Beginner", 7, (["Warrior", "Magician", "Bowman", "Thief"], 10)),
     ("Beginner", "Beginner", 14, (["Warrior", "Magician", "Bowman", "Thief"], 10)),   # still hasn't advanced
     ("Warrior", "Beginner", 5, (["Warrior"], 10)),       # planned Warrior, still a Beginner
+    ("Magician", "Beginner", 8, (["Magician"], 10)),     # every 1st job opens at 10 in Classic World, Magician too
 ])
 def test_next_job(base, job, level, expected):
     assert plan.next_job(base, job, level) == expected
@@ -45,6 +46,14 @@ def test_every_2nd_job_has_a_3rd_job_in_its_own_class():
         for job, lv in tree:
             if lv == 30:
                 assert (jobs.THIRD_JOB[job], 70) in tree, job
+
+
+def test_every_1st_job_opens_at_10():
+    """Nexon moved every 1st job advancement to level 10 (the KPQ guide's note): the Magician too."""
+    from maplehelper import jobs
+    for cls, tree in jobs.JOBS.items():
+        if cls != "Beginner":
+            assert (cls, 10) in tree, cls
 
 
 def test_no_job_tip_for_3rd_job_before_it_is_in_the_game():

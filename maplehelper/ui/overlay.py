@@ -1223,7 +1223,7 @@ class Overlay(QWidget):
         if self.profiles.active_id != getattr(self, "_sync_cid", None):
             self.sync_finished.emit(False)
             return             # the player switched character meanwhile: this read belongs to the other one
-        changes = self.profiles.apply_update(ans.profile_update or {})
+        changes = self._profile_update(ans.profile_update or {})
         if ans.avatar_box:
             self._update_avatar(self._sync_shot, ans.avatar_box)
         if changes:
@@ -1292,6 +1292,14 @@ class Overlay(QWidget):
             row.insertWidget(0, cost)
             threading.Thread(target=costs.add, args=(ans.cost_usd,), daemon=True).start()
 
+    def _profile_update(self, update: dict) -> list:
+        from .. import quests
+
+        def quest_key(name):
+            q = quests.by_name(self.kb, name)
+            return q.key if q else None
+        return self.profiles.apply_update(update, quest_key)
+
     def _apply_profile_update(self, update: dict):
         c = self.profiles.active
         if not c or not update:
@@ -1300,13 +1308,13 @@ class Overlay(QWidget):
         if isinstance(new_level, int) and new_level < c.level:
             # a lower level usually means the screenshot showed another character: ask first
             rest = {k: v for k, v in update.items() if k != "level"}
-            self._show_changes(self.profiles.apply_update(rest))
+            self._show_changes(self._profile_update(rest))
             cid = c.id
             self.add_confirm(self.t("confirm_profile", level=new_level),
-                             lambda: self._show_changes(self.profiles.apply_update({"level": new_level}))
+                             lambda: self._show_changes(self._profile_update({"level": new_level}))
                              if self.profiles.active_id == cid else None)
             return
-        self._show_changes(self.profiles.apply_update(update))
+        self._show_changes(self._profile_update(update))
 
     def _update_avatar(self, shot_jpeg: bytes, box: list) -> None:
         """Crop the player's own sprite (box from the AI, fractions of the image) into the portrait."""

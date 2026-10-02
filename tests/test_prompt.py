@@ -21,4 +21,16 @@ def test_question_and_tagged_card_are_sent_once(kb, isolated_store):
     assert p.count(q) == 1                              # only in <question>
     assert p.count("\n[monster/130101]\n") == 1         # the tagged card's page, not again as a mention
     convo = p.split("<recent_conversation>")[1].split("</recent_conversation>")[0]
-    assert "old answer 11" in convo and "old question 8" not in convo   # the last few messages only
+    assert "old answer 11" in convo and "old question 7" in convo      # this session's last 6 exchanges
+    assert "old question 6" not in convo                                 # older ones live in the summaries
+
+
+def test_long_answers_are_trimmed_in_the_recent_conversation(kb, isolated_store):
+    from maplehelper.brain import build_prompt
+    from maplehelper.store import History
+    h = History("c1")
+    h.append("user", "Q" * 700)
+    h.append("assistant", "A" * 900)
+    convo = build_prompt("hi", None, h, kb, has_screenshot=False).split("<recent_conversation>")[1]
+    assert "Q" * 600 in convo and "Q" * 601 not in convo
+    assert "A" * 400 in convo and "A" * 401 not in convo

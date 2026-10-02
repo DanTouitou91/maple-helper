@@ -66,7 +66,8 @@ def grind_map(name: str) -> bool:
     return not _NOT_GRIND.search(name) and not any(r in name for r in NOT_YET)
 
 
-def _maps(page: str, n: int = 4) -> list[tuple[str, int]]:
+def _maps(page: str, n: int = 4, name=str) -> list[tuple[str, int]]:
+    """(map, how many spawn there): the region the cell ends in filters (Hidden Street, Ossyria); name() drops it."""
     i = page.find("Map Locations")
     if i < 0:
         return []
@@ -76,7 +77,7 @@ def _maps(page: str, n: int = 4) -> list[tuple[str, int]]:
             break
         cols = [c.strip() for c in line.split(" | ")]
         if len(cols) >= 2 and cols[1].isdigit() and grind_map(cols[0]):
-            out.append((cols[0], int(cols[1])))
+            out.append((name(cols[0]), int(cols[1])))
         if len(out) >= n:
             break
     return out
@@ -119,7 +120,8 @@ def _monster(kb, key: str) -> Monster | None:
     page = kb.page(key)
     lines = page.splitlines()
     return Monster(key, e["name"], int(level), int(hp), int(exp), _after(lines, "AVOID") or 0,
-                   _after(lines, "P.DEF") or 0, _after(lines, "M.DEF") or 0, _maps(page))
+                   _after(lines, "P.DEF") or 0, _after(lines, "M.DEF") or 0,
+                   _maps(page, name=getattr(kb, "map_name", str)))      # a stand-in KB keeps the cell
 
 
 # ------------------------------------------------------------------ accuracy

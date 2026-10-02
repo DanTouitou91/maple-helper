@@ -48,6 +48,13 @@ MAX_WORDS = 9
 POSSESSIVE = re.compile(r"(?<=\w)['’]s\b", re.I)
 
 
+def number(v) -> str:
+    """A stat as the chat shows it (instant answers and cards): 7420 -> "7,420", 1250.0 -> "1,250"."""
+    if isinstance(v, float) and v.is_integer():
+        v = int(v)
+    return f"{v:,}" if isinstance(v, (int, float)) and not isinstance(v, bool) else str(v)
+
+
 def answer(question: str, kb: KnowledgeBase, t) -> Answer | None:
     """An Answer from the KB alone, or None when Claude should answer."""
     q = question.strip()
@@ -86,4 +93,4 @@ def answer(question: str, kb: KnowledgeBase, t) -> Answer | None:
     asked = [(k, label) for rx, k, label in STATS if rx.search(q)]
     if not asked or any(props.get(k) in (None, "") for k, _ in asked):
         return None          # one of the numbers asked isn't in the KB: half an answer would look whole
-    return Answer(text="\n".join(f"{name} · {label}: {props[k]}" for k, label in asked), entities=[key])
+    return Answer(text="\n".join(f"{name} · {label}: {number(props[k])}" for k, label in asked), entities=[key])

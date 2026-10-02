@@ -285,8 +285,9 @@ class Profiles:
         self.active_id = cid
         self.save()
 
-    def apply_update(self, update: dict) -> list[tuple[str, object]]:
-        """Apply a profile update from the assistant. Returns the changed (field, value) pairs."""
+    def apply_update(self, update: dict, quest_key=None) -> list[tuple[str, object]]:
+        """Apply a profile update from the assistant. Returns the changed (field, value) pairs.
+        quest_key(name) -> the quest's KB key or None: a completed quest is marked done for the quests page."""
         c = self.active
         if not c or not update:
             return []
@@ -309,10 +310,17 @@ class Profiles:
             if q not in c.active_quests:
                 c.active_quests.append(q)
                 changed.append(("quest+", q))
+        # the AI reports "quests_completed" (names); the character keeps their KB keys in quests_done
         for q in update.get("quests_completed", []) or []:
-            if q in c.active_quests:
-                c.active_quests.remove(q)
-                c.quest_ticks.pop(q, None)
+            key = quest_key(q) if quest_key else None
+            gone = [a for a in c.active_quests if a == q or key and quest_key(a) == key]
+            for a in gone:
+                c.active_quests.remove(a)
+                c.quest_ticks.pop(a, None)
+            done = bool(key) and key not in c.quests_done
+            if done:
+                c.quests_done.append(key)
+            if gone or done:
                 changed.append(("quest-", q))
         stats = update.get("stats")
         if isinstance(stats, dict):
@@ -365,7 +373,9 @@ class Profiles:
 class History:
     """Per-character conversation log (jsonl) plus rolling session summaries."""
 
-    RECENT = 8       # messages the prompt carries; older context lives in the session summaries
+    # messages the prompt carries (about 6 exchanges: summaries come only after a session ends);
+    # older context lives in the session summaries
+    RECENT = 12
 
     def __init__(self, character_id: str):
         self.log = HISTORY_DIR / f"{character_id}.jsonl"

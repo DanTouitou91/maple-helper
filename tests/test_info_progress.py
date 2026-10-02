@@ -233,6 +233,20 @@ def test_quest_tracker_ticks_and_completes(isolated_store):
     assert isolated_store.Profiles().active.quest_ticks == {}
 
 
+def test_a_quest_the_chat_completes_is_done_on_the_quests_page(isolated_store):
+    """The AI's "quests_completed" names land in quests_done as KB keys, and leave the tracker."""
+    keys = {"estelle's special sauce": "quest/2000"}
+    p = isolated_store.Profiles()
+    p.add("Kiwi", "Warrior", "Warrior", 30)
+    p.track_quest("Estelle's Special Sauce")
+    changes = p.apply_update({"quests_completed": ["estelle's special sauce", "Untracked one"]},
+                             quest_key=lambda name: keys.get(name.lower()))
+    c = isolated_store.Profiles().active
+    assert c.active_quests == [] and c.quests_done == ["quest/2000"]
+    assert changes == [("quest-", "estelle's special sauce")]       # the unknown, untracked one changes nothing
+    assert p.apply_update({"quests_completed": ["Estelle's Special Sauce"]}, quest_key=lambda n: "quest/2000") == []
+
+
 def test_quest_requirements_and_where_to_turn_in(drop_kb):
     kb = KnowledgeBase(drop_kb)
     q = quests.by_name(kb, "estelle's special sauce")

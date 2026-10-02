@@ -23,6 +23,10 @@ CLASS_PICTURE_FALLBACK = {
 }
 
 HEBREW = re.compile(r"[֐-׿]")
+# the regions a monster page's "Map Locations" cells end in (the scrape glues them onto the map's name)
+MAP_REGIONS = ("Victoria Road", "Hidden Street", "Dungeon", "Orbis", "El Nath", "Warning Street", "Shallow Passage",
+               "Deep Passage", "Rainbow Street", "Kerning City Subway", "Line 3 Construction Site", "Maple Road",
+               "Florina Road", "Ossyria", "Sleepywood", "Ludibrium", "Aqua Road")
 
 
 _FINALS = str.maketrans("ךםןףץ", "כמנפצ")
@@ -323,6 +327,24 @@ class KnowledgeBase:
                          "exp": p.get("EXP"), "maps": self._top_maps(key)})
         return sorted(rows, key=lambda r: r["level"])
 
+    @cached_property
+    def _map_names(self) -> list[str]:
+        """Every map's name, longest first ("Thicket Around the Beach III" before "Thicket Around the Beach")."""
+        return sorted({e["name"] for e in self.entities.values() if e["category"] == "map"}, key=len, reverse=True)
+
+    def map_name(self, cell: str) -> str:
+        """The map in a "Map Locations" cell, where the scrape glued the region on ("Thicket Around the Beach III
+        Victoria Road"): the longest known map name it starts with, followed by a known region; else the cell
+        less a known region; else as is ("Henesys" alone must not cut "Henesys Hunting Ground I")."""
+        cell = cell.strip()
+        regions = sorted(MAP_REGIONS, key=len, reverse=True)
+        name = next((n for n in self._map_names if cell == n or cell.startswith(n + " ") and
+                     cell[len(n) + 1:] in regions), None)
+        if name:
+            return name
+        region = next((r for r in regions if cell.endswith(" " + r)), None)
+        return cell[:-len(region) - 1] if region else cell
+
     def _top_maps(self, key: str, n: int = 3) -> list[str]:
         body = self.page(key)
         i = body.find("Map Locations")
@@ -335,7 +357,7 @@ class KnowledgeBase:
                 break  # end of the table: the "Change history" table below it has numeric rows too ("HP | 7,560 | ...")
             cols = [c.strip() for c in line.split(" | ")]
             if len(cols) >= 3 and cols[1].isdigit():
-                maps.append(cols[0])
+                maps.append(self.map_name(cols[0]))
             if len(maps) >= n:
                 break
         return maps

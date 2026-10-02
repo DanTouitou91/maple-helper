@@ -842,10 +842,8 @@ class ToolsDialog(GlassDialog):
         return card
 
     def _quest_done(self, key: str):
-        c = self.c
-        if c and key not in c.quests_done:
-            c.quests_done.append(key)
-            self.profiles.save()
+        q = quests.quest(self.kb, key)
+        self.profiles.complete_quest(q.name if q else "", key)      # off "My quests" too, its ticks with it
         self.refresh()
 
     # my quests (the ones the player took: from the chat, or "Track") ----
