@@ -23,7 +23,7 @@ from .glass import GlassDialog
 
 PAGES = ("train", "calc", "build", "quests", "crafting", "town", "prices", "exp", "more")
 MAX_QUESTS = 40
-CURRENT_ROW = {"light": "#FFD3A3", "dark": "#7A4615"}     # the build table row for the player's level
+CURRENT_ROW = {"light": "#FFD3A3", "dark": "#7A4615", "contrast": "#FFD3A3"}     # the build table row for the player's level
 
 
 def clear(layout):

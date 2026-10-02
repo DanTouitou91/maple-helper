@@ -197,6 +197,7 @@ class Brain:
         self.length = length
         self.api_key = api_key
         self.cancelled = False         # the player pressed Stop on the question being answered
+        self.no_ai = False             # no AI connected yet (settings "no_ai"): nothing may start its CLI
         self._provider = providers.get(provider)
         self.backend = self._provider.backend(self)
 
@@ -217,13 +218,14 @@ class Brain:
 
     def prewarm(self) -> None:
         """Get the next question's process ready now, where the provider supports it."""
-        self.backend.prewarm()
+        if not self.no_ai:
+            self.backend.prewarm()
 
     def shutdown(self) -> None:
         self.backend.shutdown()
 
     def available(self) -> bool:
-        return self.backend.exe is not None
+        return not self.no_ai and self.backend.exe is not None
 
     def cancel(self) -> None:
         """Stop the question being answered (from any thread): its process is killed and ask() returns
@@ -234,6 +236,8 @@ class Brain:
     def ask(self, question: str, character: Character | None, history: History | None,
             screenshot_jpeg: bytes | None, on_delta=None, focus=None) -> Answer:
         """Blocking call; on_delta(visible_text_so_far) is invoked while the answer streams."""
+        if self.no_ai:
+            return Answer(error="no_ai")      # the chat offers to connect one
         if not self.backend.exe:
             return Answer(error="not_installed")
         self.cancelled = False
@@ -285,7 +289,7 @@ class Brain:
 
     def summarize(self, transcript: str) -> str | None:
         """One-paragraph summary of a finished session, kept as long-term context."""
-        if not transcript.strip():
+        if self.no_ai or not transcript.strip():
             return None
         return self.backend.summarize(SUMMARY_PROMPT, transcript)
 

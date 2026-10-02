@@ -14,7 +14,7 @@ from .brain import Brain
 from .i18n import I18n
 from .kb import KnowledgeBase
 from .store import ASSETS, DATA_DIR, History, Profiles, Settings
-from .ui import theme
+from .ui import a11y, theme
 from .ui.dialogs import Onboarding, SettingsDialog
 from .ui.overlay import Overlay
 from .ui.patchnotes import PatchNotesDialog, WhatsNewDialog, summary
@@ -52,6 +52,7 @@ class MapleHelperApp:
         qapp.setWindowIcon(QIcon(str(ASSETS / "brand" / APP_ICON)))
         qapp.setQuitOnLastWindowClosed(False)
         self.main_thread = _MainThread()
+        self.a11y = a11y.install(qapp, lambda: self.settings["language"])   # screen-reader names, focus rings
 
     # ------------------------------------------------------------------ startup
 
@@ -88,7 +89,7 @@ class MapleHelperApp:
             if not self.run_onboarding():
                 return False
         elif not self.profiles.active:
-            # set up already (language, AI): only a character is missing
+            # set up already (language, and the AI or not): only a character is missing
             self.style()
             Onboarding(self.settings, self.profiles, self.kb, self.style, only_character=True).exec()
         self.brain = Brain(self.kb, provider=self.settings["provider"], length=self.settings["answer_length"])
@@ -351,10 +352,17 @@ class MapleHelperApp:
 
     def apply_ai_settings(self):
         """Point the brain at the chosen provider, with its model, saver mode and (when used) its stored API key."""
+        self.brain.no_ai = self.settings["no_ai"]      # no AI yet: no CLI runs (prewarm, answers, summaries)
         self.brain.provider = self.settings["provider"]
         ai = providers.get(self.settings["provider"])
         self.brain.api_key = ai.load_api_key() if self.settings.api_key_mode(ai.name) else None
         self.apply_saver_mode()
+
+    def connect_ai(self):
+        """No AI yet: the onboarding's connect page; once connected, the chat asks it."""
+        self.bring_dialogs_forward()
+        if Onboarding(self.settings, self.profiles, self.kb, self.style, only_ai=True).exec():
+            self.on_account_changed()
 
     def on_account_changed(self):
         # another provider or account: a warm process started under the old one is replaced
@@ -380,7 +388,8 @@ class MapleHelperApp:
             self.toast(t("report_saved"), t("report_saved_body", name=path.name), timeout_ms=12000)
 
         def work():
-            status = ai.status()        # runs the AI's CLI (up to ~40 s): never on the GUI thread
+            # runs the AI's CLI (up to ~40 s): never on the GUI thread, and not at all without an AI
+            status = "no AI" if self.settings["no_ai"] else ai.status()
             self.main_thread.call.emit(lambda: done(status))
         threading.Thread(target=work, daemon=True).start()
 

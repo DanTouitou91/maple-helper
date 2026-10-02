@@ -46,6 +46,9 @@ def paint_glass(widget, radius: float = None) -> None:
     rim.setColorAt(1.0, QColor(255, 255, 255, c["rim"] // 2))
     p.setPen(QPen(rim, 1))
     p.drawPath(path)
+    if c.get("edge"):              # high contrast: a solid edge, the rim is invisible on white
+        p.setPen(QPen(QColor(c["edge"]), 2))
+        p.drawPath(path)
     p.end()
 
 
