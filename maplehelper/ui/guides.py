@@ -2,17 +2,15 @@
 Hebrew/English summary on demand and "Ask about this guide" (tags it in the chat)."""
 from __future__ import annotations
 
-import webbrowser
-
 from PySide6.QtCore import QEvent, QObject, QPoint, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import QCursor, QGuiApplication, QPixmap, QTextCursor
 from PySide6.QtWidgets import (QApplication, QButtonGroup, QFrame, QHBoxLayout, QLabel, QLineEdit, QPushButton, QScrollArea,
                                QStackedWidget, QTextBrowser, QVBoxLayout, QWidget)
 
-from .. import bidi, guides
+from .. import bidi, guides, links
 from ..i18n import I18n
 from . import theme
-from .controls import rtl_buttons
+from .controls import PlainLabel, rtl_buttons
 from .glass import GlassDialog
 
 
@@ -180,12 +178,12 @@ class GuideRow(QFrame):
         col = QVBoxLayout()
         col.setSpacing(2)
         align = (Qt.AlignRight if rtl else Qt.AlignLeft) | Qt.AlignAbsolute
-        title = QLabel(bidi.plain(guides.title(g["key"], g["title"], t.lang), rtl), objectName="CardName")
+        title = PlainLabel(bidi.plain(guides.title(g["key"], g["title"], t.lang), rtl), objectName="CardName")
         title.setWordWrap(True)
         title.setAlignment(align)
         col.addWidget(title)
         meta = t(f"gcat_{g['category']}") + (f" · {t('g_minutes', n=g['minutes'])}" if g.get("minutes") else "")
-        sub = QLabel(bidi.plain(meta, rtl), objectName="CardSub")
+        sub = PlainLabel(bidi.plain(meta, rtl), objectName="CardSub")
         sub.setAlignment(align)
         col.addWidget(sub)
         row.addLayout(col, 1)
@@ -301,11 +299,11 @@ class GuidesDialog(GlassDialog):
         back.setCursor(Qt.PointingHandCursor)
         back.clicked.connect(lambda: self.stack.setCurrentIndex(0))
         lay.addWidget(back, 0, (Qt.AlignRight if rtl else Qt.AlignLeft) | Qt.AlignAbsolute)   # the reading start
-        self.r_title = QLabel(objectName="PageTitle")
+        self.r_title = PlainLabel(objectName="PageTitle")
         self.r_title.setWordWrap(True)
         self.r_title.setLayoutDirection(Qt.LeftToRight)
         lay.addWidget(self.r_title)
-        self.r_meta = QLabel(objectName="CardSub")
+        self.r_meta = PlainLabel(objectName="CardSub")
         lay.addWidget(self.r_meta)
         actions = QHBoxLayout()
         actions.setSpacing(8)
@@ -315,7 +313,7 @@ class GuidesDialog(GlassDialog):
         actions.addWidget(ask)
         web = QPushButton(bidi.plain(t("g_web"), rtl), objectName="Link")
         web.setCursor(Qt.PointingHandCursor)
-        web.clicked.connect(lambda: webbrowser.open((self.kb.get(self._reading) or {}).get("url", "")))
+        web.clicked.connect(lambda: links.open_url((self.kb.get(self._reading) or {}).get("url")))
         actions.addWidget(web)
         actions.addStretch(1)
         lay.addLayout(actions)
@@ -342,8 +340,8 @@ class GuidesDialog(GlassDialog):
             key = "guide/" + link[6:]
             if self.kb.get(key) or guides.book(key, "en"):
                 self.open_guide(key)
-        elif link.startswith("http"):
-            webbrowser.open(link)
+        else:
+            links.open_url(link)
 
     def open_guide(self, key: str):
         t = self.t

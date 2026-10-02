@@ -2,9 +2,10 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QPoint, QRect, QSize, Qt, Signal
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QLayout, QPushButton, QToolButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QLayout, QPushButton, QToolButton, QVBoxLayout, QWidget
 
 from .. import bidi
+from .controls import PlainLabel
 
 
 class Flow(QLayout):
@@ -74,7 +75,7 @@ class Chips(QWidget):
         col = QVBoxLayout(self)
         col.setContentsMargins(2, 0, 2, 0)
         col.setSpacing(6)
-        self.title = QLabel(objectName="TileGridTitle")
+        self.title = PlainLabel(objectName="TileGridTitle")
         self.title.setVisible(bool(title))
         self.title.setText(title)
         col.addWidget(self.title)

@@ -198,4 +198,17 @@ def test_privacy_page_tells_the_whole_story(lang):
     for needle in ("30" if lang == "en" else "חצי שעה", "Claude Code / Codex", "3", "feedback.json", "costs.json"):
         assert needle in text
     assert t("session_summaries") in t("privacy_ai_summary_hint")     # the switch the hint points at exists
+    assert t("auto_update") in t("privacy_net_github_hint")
+    for needle in ("Codex", "OpenAI", "Claude Code"):                  # the sandbox and the identifiers it sends
+        assert needle in t("privacy_ai_sandbox") + t("privacy_ai_sandbox_hint") + t("privacy_ai_ids")
     assert t.p("ob_privacy", "claude").count("Claude") == 1 and "OpenAI" in t.p("ob_privacy", "codex")
+
+
+def test_auto_update_switch_is_saved(qapp, isolated_store, kb):
+    from maplehelper.ui.dialogs import SettingsDialog
+    s = isolated_store.Settings()
+    assert s["auto_update"] is True
+    dlg = SettingsDialog(s, isolated_store.Profiles(), kb, lambda *_: "")
+    dlg.auto_update.setChecked(False)
+    dlg._save()
+    assert isolated_store.Settings()["auto_update"] is False

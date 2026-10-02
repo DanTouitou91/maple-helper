@@ -139,3 +139,21 @@ def test_session_summaries_off_keep_the_chat_off_the_ai(app_cls, monkeypatch):
 
 def test_session_summaries_default_on(isolated_store):
     assert isolated_store.Settings()["session_summaries"] is True
+
+
+@pytest.mark.parametrize("auto_update,expect", [(True, "download"), (False, "notice")])
+def test_auto_update_off_only_announces_a_new_version(app_cls, monkeypatch, auto_update, expect):
+    """Windows: a new version is downloaded and installed in the background, unless the player turned that off:
+    then the same notice as on macOS (a toast and a tray link), and nothing is downloaded."""
+    from maplehelper import updater
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(updater, "newer_release", lambda current: ("9.9.9", "https://github.com/x/releases"))
+    monkeypatch.setattr(updater, "update_kb", lambda before_swap=None: False)
+    seen = []
+    a = fake_app(app_cls, pending_installer=None, brain=brain([]))
+    a.settings["auto_update"] = auto_update
+    a.announce_update = lambda version, url: (seen.append("notice"), a.done.set())
+    a.update_found = lambda version: (seen.append("download"), a.done.set())
+    a.kb_updated = lambda *args, **kw: None
+    app_cls.check_kb_update_silently(a)
+    assert a.done.wait(5) and seen == [expect]

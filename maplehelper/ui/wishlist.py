@@ -11,7 +11,7 @@ from .. import bidi, market, wishlist
 from ..i18n import I18n
 from ..kb import KnowledgeBase
 from . import theme
-from .controls import rtl_buttons
+from .controls import PlainLabel, rtl_buttons
 from .glass import GlassDialog
 from .widgets import EntityCard, drop_badge
 
@@ -65,7 +65,7 @@ class WishlistDialog(GlassDialog):
             else:
                 lines = [(t("wish_no_droppers"), None)]
             for ln, source in lines:
-                lb = QLabel(bidi.plain(ln, rtl), objectName="CardStat")
+                lb = PlainLabel(bidi.plain(ln, rtl), objectName="CardStat")
                 lb.setWordWrap(True)
                 lb.setAlignment(align)
                 lb.setContentsMargins(12, 0, 12, 0)

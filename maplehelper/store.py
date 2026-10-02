@@ -117,6 +117,7 @@ DEFAULT_SETTINGS = {
     "wish_prices": {},            # item key -> {"median": last Free Market median seen, "t", "alerted": a drop shown}
     "no_ai": False,               # "use without AI for now": instant answers, guides and tools; no AI CLI ever runs
     "session_summaries": True,    # ~30 min after the chat closes, the AI gets the session's chat for a short memory
+    "auto_update": True,          # Windows: download and install a new version in the background; off = a notice only
 }
 
 
@@ -177,7 +178,7 @@ class Character:
         if self.map:
             parts.append(f"Last known map: {self.map}")
         if self.active_quests:
-            parts.append("Active quests: " + ", ".join(self.active_quests))
+            parts.append("Active quests: " + ", ".join(map(str, self.active_quests)))
         st = self.stats or {}
         if st:
             bits = [f"ACC {st['acc']}" if st.get("acc") else "",
@@ -185,11 +186,21 @@ class Character:
                     f"max HP {st['hp']}" if st.get("hp") else "", f"max MP {st['mp']}" if st.get("mp") else ""]
             parts.append("Stats (stat window): " + ", ".join(b for b in bits if b))
         if self.notes:
-            parts.append("Notes: " + "; ".join(self.notes[-10:]))
+            parts.append("Notes: " + "; ".join(map(str, self.notes[-10:])))
         return "\n".join(parts)
 
 
 STAT_KEYS = ("acc", "dmg_min", "dmg_max", "hp", "mp")
+MAX_LEVEL = 200
+MAX_TEXT = 200          # a job, map, quest name or note from the AI longer than this is not one
+
+
+def _text(v) -> str | None:
+    return v if isinstance(v, str) and 0 < len(v) <= MAX_TEXT else None
+
+
+def _number(v) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and v == v     # no bool, no NaN
 
 
 class Profiles:
@@ -290,29 +301,29 @@ class Profiles:
         """Apply a profile update from the assistant. Returns the changed (field, value) pairs.
         quest_key(name) -> the quest's KB key or None: a completed quest is marked done for the quests page."""
         c = self.active
-        if not c or not update:
+        if not c or not isinstance(update, dict) or not update:
             return []
         changed = []
         for key in ("level", "job", "base_class", "map"):
             val = update.get(key)
-            if val in (None, "", 0):
-                continue
             if key == "level":
                 try:
-                    val = int(val)
-                except (TypeError, ValueError):
+                    val = int(val) if _number(val) or isinstance(val, str) else None
+                except ValueError:
+                    val = None
+                if val is None or not 1 <= val <= MAX_LEVEL:
                     continue
-                if not 1 <= val <= 250:
-                    continue
+            elif _text(val) is None:
+                continue
             if getattr(c, key) != val:
                 setattr(c, key, val)
                 changed.append((key, val))
-        for q in update.get("quests_started", []) or []:
+        for q in self._names(update.get("quests_started")):
             if q not in c.active_quests:
                 c.active_quests.append(q)
                 changed.append(("quest+", q))
         # the AI reports "quests_completed" (names); the character keeps their KB keys in quests_done
-        for q in update.get("quests_completed", []) or []:
+        for q in self._names(update.get("quests_completed")):
             key = quest_key(q) if quest_key else None
             gone = [a for a in c.active_quests if a == q or key and quest_key(a) == key]
             for a in gone:
@@ -325,8 +336,7 @@ class Profiles:
                 changed.append(("quest-", q))
         stats = update.get("stats")
         if isinstance(stats, dict):
-            clean = {k: int(v) for k, v in stats.items()
-                     if k in STAT_KEYS and isinstance(v, (int, float)) and 0 < v < 1_000_000}
+            clean = {k: int(v) for k, v in stats.items() if k in STAT_KEYS and _number(v) and 0 < v < 1_000_000}
             if clean.get("dmg_min", 0) > clean.get("dmg_max", 10**9):
                 clean["dmg_min"], clean["dmg_max"] = clean["dmg_max"], clean["dmg_min"]
             new = {**c.stats, **clean}
@@ -334,12 +344,12 @@ class Profiles:
                 c.stats = new
                 changed.append(("stats", ", ".join(f"{k} {v}" for k, v in clean.items())))
         pct = update.get("exp_percent")
-        if isinstance(pct, (int, float)) and 0 <= pct <= 100 and pct != c.exp_pct:
+        if _number(pct) and 0 <= pct <= 100 and pct != c.exp_pct:
             c.exp_pct = round(float(pct), 2)
             changed.append(("exp", c.exp_pct))
         if any(f in ("level", "exp") for f, _ in changed):
             self._progressed(c, c.level, c.exp_pct if any(f == "exp" for f, _ in changed) else None)
-        note = update.get("note")
+        note = _text(update.get("note"))
         if note and note not in c.notes:
             c.notes.append(note)
             changed.append(("note", note))
@@ -347,6 +357,10 @@ class Profiles:
             c.updated_at = time.time()
             self.save()
         return changed
+
+    @staticmethod
+    def _names(value) -> list[str]:
+        return [q for q in value if _text(q)] if isinstance(value, list) else []
 
     def set_avatar(self, png_bytes: bytes) -> None:
         c = self.active

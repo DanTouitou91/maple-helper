@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (QButtonGroup, QFrame, QGridLayout, QHBoxLayout, Q
                                QScrollArea, QStackedWidget, QVBoxLayout, QWidget)
 
 from .. import bidi, feedback, providers
-from .controls import Section, Segmented, Select, Stepper, Switch, rtl_buttons
+from .controls import PlainLabel, Section, Segmented, Select, Stepper, Switch, rtl_buttons
 from .glass import GlassDialog
 from ..i18n import I18n
 from ..kb import KnowledgeBase
@@ -678,7 +678,7 @@ class SettingsDialog(GlassDialog):
         self._models_bridge = _Bridge()
         self._models_bridge.account.connect(lambda r: self._show_models(r["provider"], r["models"]))
         self._fill_models()
-        self.account_label = QLabel(bidi.plain(t("ob_checking"), rtl), objectName="RowLabel")
+        self.account_label = PlainLabel(bidi.plain(t("ob_checking"), rtl), objectName="RowLabel")
         self.account_label.setWordWrap(True)
         self.account_label.setContentsMargins(0, 10, 0, 10)
         sec.add_widget(self.account_label)
@@ -703,7 +703,7 @@ class SettingsDialog(GlassDialog):
 
         # usage of the plan above (Claude reports it with each answer, ChatGPT when asked) and saver mode
         sec = self.usage_sec = Section(t("sec_usage"), rtl)
-        self.usage_meter = QLabel(objectName="RowLabel")
+        self.usage_meter = PlainLabel(objectName="RowLabel")
         self.usage_meter.setWordWrap(True)
         self.usage_meter.setContentsMargins(0, 10, 0, 2)
         sec.add_widget(self.usage_meter)
@@ -745,6 +745,9 @@ class SettingsDialog(GlassDialog):
         sec = Section(t("sec_system"), rtl)
         self.autostart = Switch(settings["start_with_windows"])
         sec.add_row(t("start_at_login" if sys.platform == "darwin" else "start_with_windows"), self.autostart)
+        self.auto_update = Switch(settings["auto_update"])
+        if sys.platform != "darwin":        # macOS only ever gets a notice (the installer is a Windows program)
+            sec.add_row(t("auto_update"), self.auto_update, hint=t("auto_update_hint"))
         privacy = QPushButton(t("privacy"), objectName="Link")
         privacy.setCursor(Qt.PointingHandCursor)
         privacy.clicked.connect(self._show_privacy)
@@ -1047,6 +1050,7 @@ class SettingsDialog(GlassDialog):
             "saver_mode": self.saver.isChecked(),
             "answer_length": self.length.value(),
             "start_with_windows": self.autostart.isChecked(),
+            "auto_update": self.auto_update.isChecked(),
             "chat_opacity": self.opacity.value(),
             # untouched here: keep the live value (F9 may have turned it off while Settings was open)
             "click_through": (self.click_through.isChecked() if self.click_through.isChecked() != self._through_at_open

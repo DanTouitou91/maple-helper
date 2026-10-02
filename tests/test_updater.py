@@ -363,7 +363,7 @@ def test_unreadable_meta_or_full_disk_fails_cleanly(env, monkeypatch):
     def full(*_a, **_k):
         raise OSError(28, "No space left on device")
     publish()
-    monkeypatch.setattr(updater.zipfile.ZipFile, "extractall", full)
+    monkeypatch.setattr(updater.zipfile.ZipFile, "extract", full)
     assert updater.update_kb() is None and still_old(user_kb)
     assert not user_kb.with_name("kb.new").exists()
 
@@ -395,3 +395,43 @@ def test_failed_stream_leaves_no_partial_file(tmp_path, monkeypatch):
 def test_short_and_long_versions_are_the_same_release():
     assert updater._version_tuple("1.0") == updater._version_tuple("v1.0.0")
     assert updater._version_tuple("0.7.2") > updater._version_tuple("0.7")
+
+
+# ---------------------------------------------------------------- what a kb.zip may hold
+
+@pytest.mark.parametrize("member", ["../../evil.txt", "/abs.txt", "CLAUDE.md", "AGENTS.md", ".claude/settings.json",
+                                    ".codex/config.toml", "pages/monster/../1.md", "pages/monster/.hidden.md",
+                                    "img/monster/1.exe", "pages/monster/1.md/x", "notes.txt", "kb/index.json"])
+def test_kb_zip_with_a_foreign_member_is_rejected_whole(env, member, caplog):
+    """A kb.zip holds the KB's files only: no path leaving the folder, no AI instructions, nothing else."""
+    user_kb, _, publish = env
+    publish(data=make_zip({"index.json": "[]", "meta.json": "{}", "pages/monster/1.md": "# x", member: "planted"}))
+    assert updater.update_kb() is None and still_old(user_kb)
+    assert not user_kb.with_name("kb.new").exists() and not (user_kb.parent / "evil.txt").exists()
+    assert "kb.zip rejected" in caplog.text and member in caplog.text
+
+
+def test_kb_zip_with_a_symlink_is_rejected(env):
+    import stat
+    user_kb, _, publish = env
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("index.json", "[]")
+        link = zipfile.ZipInfo("pages/monster/1.md")
+        link.create_system = 3
+        link.external_attr = (stat.S_IFLNK | 0o777) << 16
+        z.writestr(link, "/etc/hostname")
+    publish(data=buf.getvalue())
+    assert updater.update_kb() is None and still_old(user_kb)
+
+
+def test_kb_zip_with_every_kind_of_kb_file_installs(env):
+    user_kb, _, publish = env
+    files = {"index.json": '[{"key": "monster/1"}]', "aliases.json": "{}", "meta.json": "{}", "changelog.json": "[]",
+             "last_run.json": "{}", "drops.tsv": "monster\t", "pages/": "", "pages/monster/": "", "img/": "",
+             "pages/monster/1.md": "# x", "pages/skill/warrior__power-strike.md": "# y", "img/monster/1.png": "png",
+             "img/skill/warrior__power-strike.png": "png"}
+    publish(data=make_zip(files))
+    assert updater.update_kb() is True
+    assert (user_kb / "img" / "skill" / "warrior__power-strike.png").read_text() == "png"
+    assert json.loads((user_kb / "meta.json").read_text())["version"] == "2026.02.01.0000"

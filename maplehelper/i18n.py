@@ -269,6 +269,9 @@ STRINGS = {
     "short": {"he": "קצר", "en": "Short"},
     "detailed": {"he": "מפורט", "en": "Detailed"},
     "start_with_windows": {"he": "הפעלה עם הדלקת המחשב", "en": "Start when the computer starts"},
+    "auto_update": {"he": "עדכון אוטומטי", "en": "Update automatically"},
+    "auto_update_hint": {"he": "גרסה חדשה יורדת ומותקנת ברקע. כבוי: רק הודעה שיש גרסה חדשה",
+                         "en": "A new version downloads and installs in the background. Off: only a notice that one exists"},
     "report_problem": {"he": "דיווח על תקלה", "en": "Report a problem"},
     "report_saved": {"he": "דוח התקלה נשמר בשולחן העבודה",
                      "en": "The problem report was saved to your desktop"},
@@ -662,9 +665,22 @@ STRINGS = {
                              "sign-in, updates and technical reports"},
     "privacy_ai_cli_hint": {"he": "האפליקציה מכבה את זה היכן שהן מאפשרות (סטטיסטיקות שימוש, דיווחי שגיאות, עדכון אוטומטי)",
                             "en": "The app turns these off where they allow it (usage stats, error reports, auto-update)"},
+    "privacy_ai_ids": {"he": "Claude Code שולח עם כל בקשה גם מזהים טכניים: מזהה אקראי של ההתקנה, מערכת ההפעלה והגרסה שלה, "
+                             "ונתיב תיקיית המאגר. האפליקציה לא יכולה לכבות את זה",
+                       "en": "Claude Code also sends technical identifiers with every request: a random per-install ID, "
+                             "the OS and its version, and the database folder's path. The app can't turn that off"},
+    "privacy_ai_sandbox": {"he": "ארגז החול \"לקריאה בלבד\" של Codex יכול לקרוא כל קובץ במחשב: דף במאגר המשחק עם הוראות "
+                                 "מושתלות יכול, בתיאוריה, לגרום לו לקרוא קבצים מקומיים שיישלחו ל-OpenAI",
+                           "en": "Codex's \"read-only\" sandbox can read any file on the computer: a game-database page "
+                                 "with planted instructions could, in theory, make it read local files, which then go to OpenAI"},
+    "privacy_ai_sandbox_hint": {"he": "Claude Code מוגבל לתיקיית המאגר בלבד", "en": "Claude Code is confined to the database folder"},
     "privacy_sec_net": {"he": "חיבורים אחרים", "en": "Other connections"},
-    "privacy_net_github": {"he": "בדיקת גרסה אוטומטית בהפעלה וכל 3 שעות (רואים את כתובת ה-IP שלכם, בלי חשבון)",
-                           "en": "Automatic version checks at startup and every 3 hours (your IP address, no account)"},
+    "privacy_net_github": {"he": "GitHub: בדיקת גרסה אוטומטית בהפעלה וכל 3 שעות (רואים את כתובת ה-IP שלכם, בלי חשבון). "
+                                 "ב-Windows גרסה חדשה של האפליקציה יורדת ומותקנת לבד ברקע",
+                           "en": "GitHub: automatic version checks at startup and every 3 hours (your IP address, no account). "
+                                 "On Windows a new app version is downloaded and installed in the background"},
+    "privacy_net_github_hint": {"he": "אפשר לכבות בהגדרות: \"עדכון אוטומטי\". אז מוצגת רק הודעה שיש גרסה חדשה",
+                                "en": "Turn it off in Settings: \"Update automatically\". Then only a notice of a new version is shown"},
     "privacy_net_meowdb": {"he": "שמות פריטים כשבודקים מחירים ב-Free Market, כולל אוטומטית כשרשימת המשאלות נפתחת "
                                  "(כל פריט פעם אחת בכל הפעלה)",
                            "en": "Item names when you check Free Market prices, including automatically when the "

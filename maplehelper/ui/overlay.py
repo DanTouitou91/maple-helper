@@ -21,6 +21,7 @@ from .minibubble import MiniBubble
 from .widgets import (SELECTION, WISHLIST, Bubble, BubbleRow, DropGroupCard, EntityCard, NoticeCard, ProfileCard,
                       SessionCard, SystemLine, TileGrid, character_image)
 from .chatbits import Chips, Rating, footer
+from .controls import PlainLabel
 
 
 
@@ -273,7 +274,7 @@ class Overlay(QWidget):
         ub.addWidget(QLabel(theme.ICON["refresh"], objectName="InfoIcon"), 0, Qt.AlignVCenter)
         col = QVBoxLayout()
         col.setSpacing(4)
-        self.update_label = QLabel(objectName="InfoText")
+        self.update_label = PlainLabel(objectName="InfoText")
         self.update_label.setWordWrap(True)
         col.addWidget(self.update_label)
         from PySide6.QtWidgets import QProgressBar

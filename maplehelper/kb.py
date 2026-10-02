@@ -7,6 +7,7 @@ level), so most answers need no tool round-trips at all.
 from __future__ import annotations
 
 import json
+import logging
 import re
 import sys
 import threading
@@ -15,7 +16,12 @@ from pathlib import Path
 
 from .store import ASSETS, BUNDLED_KB, kb_dir
 
+log = logging.getLogger(__name__)
 FALLBACK_DIR = ASSETS / "fallback"
+# an entry's key is "<category>/<slug>" and its picture "img/<category>/<slug>.png": keys and pictures are joined
+# into file paths, so anything else (a "..", a slash too many, an absolute path) is dropped at load time
+KEY = re.compile(r"[a-z]+/[A-Za-z0-9_][A-Za-z0-9_.-]*")
+IMAGE = re.compile(r"img/[a-z]+/[A-Za-z0-9_][A-Za-z0-9_.-]*\.(?:png|jpg|jpeg|gif|webp)")
 CLASS_PICTURE_FALLBACK = {
     "crusader": "fighter", "white-knight": "page", "dragon-knight": "spearman", "f-p-mage": "f-p-wizard",
     "i-l-mage": "i-l-wizard", "priest": "cleric", "ranger": "hunter", "sniper": "crossbowman",
@@ -59,6 +65,13 @@ class KnowledgeBase:
         idx = self.root / "index.json"
         if idx.exists():
             for e in json.loads(idx.read_text(encoding="utf-8")):
+                if not (isinstance(e, dict) and isinstance(e.get("key"), str) and KEY.fullmatch(e["key"])
+                        and isinstance(e.get("name"), str) and isinstance(e.get("category"), str)):
+                    log.warning("index.json: entry dropped: %.80s", e)
+                    continue
+                if e.get("image") and not (isinstance(e["image"], str) and IMAGE.fullmatch(e["image"])):
+                    log.warning("index.json: picture of %s dropped: %.80s", e["key"], e["image"])
+                    e = {**e, "image": None}
                 self.entities[e["key"]] = e
         self.aliases: dict[str, str] = {}   # normalized alias -> key
         alias_file = self.root / "aliases.json"
@@ -72,11 +85,19 @@ class KnowledgeBase:
     def get(self, key: str) -> dict | None:
         return self.entities.get(key)
 
+    def _file(self, *parts: str) -> Path | None:
+        """A file of the KB, or None when the path would leave the KB folder or the file is missing."""
+        p = self.root.joinpath(*parts)
+        try:
+            inside = p.resolve().is_relative_to(self.root.resolve())
+        except OSError:
+            return None
+        return p if inside and p.is_file() else None
+
     def image_path(self, key: str) -> Path | None:
         e = self.get(key)
         if e and e.get("image"):
-            p = self.root / e["image"]
-            return p if p.exists() else None
+            return self._file(e["image"])
         if e and e["category"] == "quest":
             # a quest shows the NPC who gives it
             giver = str((e.get("props") or {}).get("NPC") or "").lower()
@@ -114,8 +135,8 @@ class KnowledgeBase:
         if not e:
             return ""
         cat, _, slug = key.partition("/")
-        p = self.root / "pages" / cat / f"{slug}.md"
-        return p.read_text(encoding="utf-8") if p.exists() else ""
+        p = self._file("pages", cat, f"{slug}.md") if KEY.fullmatch(key) else None
+        return p.read_text(encoding="utf-8") if p else ""
 
     def page_body(self, key: str, limit: int = 2500) -> str:
         text = self.page(key)

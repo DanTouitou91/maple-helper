@@ -6,10 +6,12 @@ The zip is unpacked into %APPDATA%/MapleHelper/kb, which then wins over the bund
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
 import io
 import json
 import shutil
+import stat
 import time
 import urllib.error
 import urllib.request
@@ -18,6 +20,7 @@ from pathlib import Path
 
 from .store import USER_KB, kb_dir
 
+log = logging.getLogger(__name__)
 # App updates come from this fork's own releases only: without a release here, nothing replaces local changes.
 APP_REPO = "DanTouitou91/maple-helper"
 # The knowledge base is game data (no code), so it keeps following the original project's releases.
@@ -103,6 +106,34 @@ def _get(url: str, timeout: int = 30) -> bytes | None:
         return None
 
 
+# What a kb.zip may hold (tools/kb_release.py pack: the KB's files at the zip root). Anything else, including
+# an instructions file for an AI (CLAUDE.md, AGENTS.md, .claude/) or a path leaving the folder, fails the update.
+KB_FILES = {"index.json", "aliases.json", "meta.json", "changelog.json", "last_run.json", "drops.tsv"}
+KB_MEMBER = re.compile(r"(pages/[a-z]+/[A-Za-z0-9_][A-Za-z0-9_.-]*\.md|img/[a-z]+/[A-Za-z0-9_][A-Za-z0-9_.-]*\.png)")
+KB_FOLDER = re.compile(r"(pages|img)(/[a-z]+)?/")
+
+
+def kb_member_ok(info: zipfile.ZipInfo) -> bool:
+    name = info.filename
+    if stat.S_ISLNK(info.external_attr >> 16):
+        return False
+    if info.is_dir():
+        return bool(KB_FOLDER.fullmatch(name))
+    return name in KB_FILES or bool(KB_MEMBER.fullmatch(name))
+
+
+def unpack_kb(z: zipfile.ZipFile, dest: Path) -> bool:
+    """Extract a kb.zip into dest; False (nothing extracted) when any member isn't part of a knowledge base."""
+    bad = [i.filename for i in z.infolist() if not kb_member_ok(i)]
+    if bad:
+        log.warning("kb.zip rejected: %d unexpected member(s), e.g. %s", len(bad), ", ".join(bad[:3]))
+        return False
+    for info in z.infolist():
+        if not info.is_dir():
+            z.extract(info, dest)
+    return True
+
+
 RENAME_TRIES, RENAME_WAIT = 5, 0.5
 
 
@@ -152,13 +183,14 @@ def update_kb(before_swap=None) -> bool | None:
         shutil.rmtree(tmp, ignore_errors=True)
         try:
             with zipfile.ZipFile(io.BytesIO(data)) as z:
-                z.extractall(tmp)
+                ok = unpack_kb(z, tmp)
             meta_path = tmp / "meta.json"
-            meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
+            meta = json.loads(meta_path.read_text(encoding="utf-8")) if ok and meta_path.exists() else {}
             meta = meta if isinstance(meta, dict) else {}
             meta["version"] = manifest["version"]
-            meta_path.write_text(json.dumps(meta, indent=1), encoding="utf-8")
-            ok = (tmp / "index.json").exists()
+            if ok:
+                meta_path.write_text(json.dumps(meta, indent=1), encoding="utf-8")
+            ok = ok and (tmp / "index.json").exists()
         except (zipfile.BadZipFile, OSError, ValueError):     # a broken zip or meta.json, a full disk
             ok = False
         if not ok:

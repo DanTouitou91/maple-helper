@@ -16,8 +16,9 @@ from .glass import GlassDialog
 SECTIONS = [
     ("privacy_sec_ai", [("privacy_ai_question", None), ("privacy_ai_shot", None), ("privacy_ai_profile", None),
                         ("privacy_ai_chat", None), ("privacy_ai_summary", "privacy_ai_summary_hint"),
-                        ("privacy_ai_where", "privacy_ai_where_hint"), ("privacy_ai_cli", "privacy_ai_cli_hint")]),
-    ("privacy_sec_net", [("GitHub", "privacy_net_github"), ("meowdb.com", "privacy_net_meowdb"),
+                        ("privacy_ai_where", "privacy_ai_where_hint"), ("privacy_ai_cli", "privacy_ai_cli_hint"),
+                        ("privacy_ai_ids", None), ("privacy_ai_sandbox", "privacy_ai_sandbox_hint")]),
+    ("privacy_sec_net", [("privacy_net_github", "privacy_net_github_hint"), ("meowdb.com", "privacy_net_meowdb"),
                          ("Hugging Face", "privacy_net_hf")]),
     ("privacy_sec_local", [("privacy_local_chats", None), ("privacy_local_ratings", None),
                            ("privacy_local_voice", None), ("privacy_local_keys", None),

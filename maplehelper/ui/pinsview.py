@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (QFrame, QHBoxLayout, QLabel, QLineEdit, QProgress
 from .. import bidi, pins
 from ..i18n import I18n
 from . import theme
-from .controls import rtl_buttons
+from .controls import PlainLabel, rtl_buttons
 from .glass import GlassDialog
 
 
@@ -64,7 +64,7 @@ class PinsBar(QFrame):
             bl.setContentsMargins(0, 0, 0, 0)
             bl.setSpacing(2)
             top = QHBoxLayout()
-            q = QLabel(bidi.plain(p.get("q") or "", rtl), objectName="CardName")
+            q = PlainLabel(bidi.plain(p.get("q") or "", rtl), objectName="CardName")
             q.setWordWrap(True)
             top.addWidget(q, 1)
             x = QToolButton(objectName="Icon", text="✕")
@@ -145,7 +145,7 @@ class HistoryDialog(GlassDialog):
             pin.clicked.connect(lambda _=False, p=p, b=pin: (self.pin_requested.emit(p["q"], p["a"]), b.setEnabled(False)))
             top.addWidget(pin)
             cl.addLayout(top)
-            qlb = QLabel(bidi.plain(p["q"], rtl), objectName="CardName")
+            qlb = PlainLabel(bidi.plain(p["q"], rtl), objectName="CardName")
             qlb.setWordWrap(True)
             cl.addWidget(qlb)
             cl.addWidget(_answer_label(p["a"]))
@@ -170,9 +170,9 @@ def character_card_image(c, avatar, kb, progress: dict | None, t) -> QPixmap:
     lay.addWidget(pic, 0, Qt.AlignTop)
     col = QVBoxLayout()
     col.setSpacing(3)
-    name = QLabel(c.name, objectName="ShareName")
+    name = PlainLabel(c.name, objectName="ShareName")
     col.addWidget(name)
-    col.addWidget(QLabel(f"Lv. {c.level} · {c.job}", objectName="ShareMeta"))
+    col.addWidget(PlainLabel(f"Lv. {c.level} · {c.job}", objectName="ShareMeta"))
     if progress:
         bar = QProgressBar(objectName="ExpBar")
         bar.setRange(0, 1000)
@@ -182,7 +182,7 @@ def character_card_image(c, avatar, kb, progress: dict | None, t) -> QPixmap:
         col.addWidget(bar)
         col.addWidget(QLabel(f"EXP {progress['pct']:g}%", objectName="ExpText"))
     if c.map:
-        col.addWidget(QLabel(c.map, objectName="ExpText"))
+        col.addWidget(PlainLabel(c.map, objectName="ExpText"))
     col.addStretch(1)
     brand = QHBoxLayout()
     brand.addStretch(1)

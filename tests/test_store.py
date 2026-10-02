@@ -69,6 +69,30 @@ class TestProfiles:
             assert p.apply_update({"level": bad}) == []
         assert p.active.level == 12
 
+    def test_hostile_update_from_the_ai_changes_nothing_it_may_not(self, isolated_store):
+        """The @@META@@ JSON is the AI's: only the documented keys, with sane types and sizes, reach the profile."""
+        p = self.make(isolated_store)
+        update = {"level": "999", "job": "Fighter", "base_class": "Mage", "map": "x" * 201, "note": "note one",
+                  "quests_started": ["q1", 7, {"x": 1}, "y" * 201], "quests_completed": [1],
+                  "stats": {"acc": 1e308, "hp": "9", "mp": 12, "dmg_min": True}, "exp_percent": 150,
+                  "unknown_key": "ignored", "id": "zzz", "name": "Renamed"}
+        assert p.apply_update(update) == [("job", "Fighter"), ("base_class", "Mage"), ("quest+", "q1"),
+                                          ("stats", "mp 12"), ("note", "note one")]
+        c = p.active
+        assert (c.level, c.map, c.id, c.name, c.exp_pct, c.stats) == (12, "", c.id, "Tal", None, {"mp": 12})
+        assert c.active_quests == ["q1"] and "Active quests: q1" in c.summary()
+        for bad in (["not", "a", "dict"], "text-not-dict", None, 7, {}):
+            assert p.apply_update(bad) == []
+        for bad in ({"level": True}, {"level": 201}, {"level": float("nan")}, {"exp_percent": True},
+                    {"exp_percent": float("nan")}, {"quests_started": "q1"}, {"note": 5}, {"note": "n" * 201}):
+            assert p.apply_update(bad) == [], bad
+        assert p.apply_update({"level": 200.0, "exp_percent": 12}) == [("level", 200), ("exp", 12.0)]
+
+    def test_summary_survives_odd_values_already_on_disk(self, isolated_store):
+        c = self.make(isolated_store).active
+        c.active_quests, c.notes = ["q1", 7], [{"x": 1}]
+        assert "q1, 7" in c.summary() and "{'x': 1}" in c.summary()
+
     def test_no_active_character(self, isolated_store):
         assert isolated_store.Profiles().apply_update({"level": 5}) == []
 

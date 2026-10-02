@@ -1,5 +1,16 @@
 [
  {
+  "version": "0.8.2",
+  "he": [
+   "הגנה מפני מסד נתונים פגום: טקסט מהמאגר ומה-AI מוצג כטקסט בלבד, קישורים נפתחים רק ל-meowdb.com, ועדכון מאגר מתקבל רק עם הקבצים הצפויים.",
+   "דף הפרטיות מסביר מה ארגז החול של Codex יכול לקרוא, אילו מזהים טכניים Claude Code שולח, ושעדכוני האפליקציה מותקנים לבד ברקע. מתג חדש בהגדרות: \"עדכון אוטומטי\"."
+  ],
+  "en": [
+   "Protection against a tampered game database: database and AI text is shown as plain text, links open only to meowdb.com, and a database update is accepted only with the expected files.",
+   "The privacy page explains what Codex's sandbox can read, which technical identifiers Claude Code sends, and that app updates install in the background. New Settings switch: \"Update automatically\"."
+  ]
+ },
+ {
   "version": "0.8.1",
   "he": [
    "פרטיות: הדיווחים הטכניים של Claude Code ושל Codex ליצרניות שלהם כבויים בכל הפעלה מתוך האפליקציה.",

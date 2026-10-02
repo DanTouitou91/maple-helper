@@ -244,6 +244,8 @@ def book(key: str, lang: str) -> dict | None:
 
 @lru_cache(maxsize=128)   # shipped with the app, never changes while it runs; the build plan reads each twice
 def _book(slug: str, lang: str) -> dict | None:
+    if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]*", slug):     # a slug is a file name, never a path
+        return None
     en = _load(TRANSLATIONS / "en" / f"{slug}.json")
     if not en:
         return None

@@ -152,3 +152,30 @@ def test_drop_table_in_a_read_only_folder_is_skipped(kb_copy, monkeypatch):
     monkeypatch.setattr(Path, "write_text", denied)
     KnowledgeBase(kb_copy).ensure_drop_table()              # no crash, no file
     assert not (kb_copy / "drops.tsv").exists()
+
+
+def test_index_entries_that_would_leave_the_kb_folder_are_dropped(kb_copy, caplog):
+    """Keys and pictures become file paths: a ".." or an absolute path in the upstream index reads nothing."""
+    import json
+
+    from maplehelper.kb import KnowledgeBase
+    (kb_copy.parent / "outside-notes.md").write_text("OUTSIDE-FILE-MARKER", encoding="utf-8")
+    (kb_copy.parent / "outside.png").write_bytes(b"png")
+    index = json.loads((kb_copy / "index.json").read_text(encoding="utf-8"))
+    index += [{"key": "monster/../../outside-notes", "name": "Snailzilla", "category": "monster", "props": {"Level": 3}},
+              {"key": "item/1", "name": "Red Potion", "category": "item", "image": "/etc/hostname", "props": {}},
+              {"key": "item/2", "name": "Blue Potion", "category": "item", "image": "../outside.png", "props": {}},
+              {"key": "item/a/b", "name": "x", "category": "item"}, {"key": 5, "name": "x", "category": "item"},
+              {"key": "item/.hidden", "name": "x", "category": "item"}, "not an entry"]
+    (kb_copy / "index.json").write_text(json.dumps(index), encoding="utf-8")
+    k = KnowledgeBase(kb_copy)
+    assert len(k.entities) == 15 + 2 and "monster/../../outside-notes" not in k.entities
+    assert k.page("monster/../../outside-notes") == "" and "Snailzilla" not in k.level_digest(3)
+    assert k.image_path("item/1") is None and k.image_path("item/2") is None and k.get("item/2")["image"] is None
+    assert k.picture("item/1").name == "item.png"
+    assert caplog.text.count("dropped") == 7
+    # even an entry that got in anyway can't read outside the folder
+    k.entities["monster/../../outside-notes"] = {"key": "monster/../../outside-notes", "name": "x", "category": "monster"}
+    assert k.page("monster/../../outside-notes") == ""
+    k.entities["item/2"]["image"] = "../outside.png"
+    assert k.image_path("item/2") is None

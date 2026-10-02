@@ -4,13 +4,12 @@ from __future__ import annotations
 import sys
 import threading
 import time
-import webbrowser
 
 from PySide6.QtCore import QLockFile, QObject, Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QIcon, QKeySequence
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
-from . import APP_NAME, __version__, feedback, osapi, providers, report, updater, whatsnew, wishlist
+from . import APP_NAME, __version__, feedback, links, osapi, providers, report, updater, whatsnew, wishlist
 from .brain import Brain
 from .i18n import I18n
 from .kb import KnowledgeBase
@@ -459,13 +458,14 @@ class MapleHelperApp:
     # ------------------------------------------------------------------ knowledge base updates
 
     def check_kb_update_silently(self):
-        if getattr(sys, "frozen", False) and osapi.IS_MAC:
-            # no silent self-update on macOS (the installer is a Windows .exe): point at the new DMG instead
-            def mac_update():
+        if getattr(sys, "frozen", False) and (osapi.IS_MAC or not self.settings["auto_update"]):
+            # a notice only: macOS has no silent self-update (the installer is a Windows .exe), and on Windows
+            # the player may have turned automatic updates off
+            def notice():
                 rel = updater.newer_release(__version__)
                 if rel:
                     self.main_thread.call.emit(lambda: self.announce_update(*rel))
-            threading.Thread(target=mac_update, daemon=True).start()
+            threading.Thread(target=notice, daemon=True).start()
         elif getattr(sys, "frozen", False) and not self.pending_installer and not getattr(self, "_downloading", False):
             def app_update():
                 rel = updater.newer_release(__version__)
@@ -520,7 +520,7 @@ class MapleHelperApp:
         self._mac_announced = version
         t = I18n(self.settings["language"])
         self.toast(t("update_available", version=version), t("update_available_mac"), timeout_ms=20000)
-        a = QAction(t("update_available", version=version), self._tray_menu, triggered=lambda: webbrowser.open(url))
+        a = QAction(t("update_available", version=version), self._tray_menu, triggered=lambda: links.open_url(url))
         self._tray_menu.insertAction(self._tray_menu.actions()[2], a)   # right under the header
 
     def update_found(self, version: str):

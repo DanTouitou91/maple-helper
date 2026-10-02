@@ -189,3 +189,10 @@ def test_hovering_a_guide_cover_shows_it_large(tmp_path):
     QApplication.sendEvent(pic, QEvent(QEvent.Leave))
     assert not pic.pop.isVisible()
     app.processEvents()
+
+
+def test_a_guide_slug_is_a_file_name_never_a_path():
+    """book() reads assets/guides/<lang>/<slug>.json: a slug with ".." must not open any other JSON file."""
+    assert guides.book("guide/../../../evals/answers", "en") is None
+    assert guides.book("guide/../../../../pyproject", "en") is None
+    assert guides.book("guide/assassin-class-guide", "en") is not None

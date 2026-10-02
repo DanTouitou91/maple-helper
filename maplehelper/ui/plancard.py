@@ -10,6 +10,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QProgressBar, QToolButton, QVBoxLayout
 
 from .. import bidi, plan
+from .controls import PlainLabel
 
 
 class ExpBar(QFrame):
@@ -62,7 +63,7 @@ class TipStrip(QFrame):
         row.setSpacing(8)
         self.icon = QLabel(theme.ICON["info"], objectName="InfoIcon")
         row.addWidget(self.icon, 0, Qt.AlignVCenter)
-        self.text = QLabel(objectName="InfoText")
+        self.text = PlainLabel(objectName="InfoText")
         self.text.setWordWrap(True)
         row.addWidget(self.text, 1)
         self.close_btn = QToolButton(objectName="Icon", text=theme.ICON["close"])

@@ -15,10 +15,10 @@ from PySide6.QtGui import QIcon, QPixmap, QStandardItem, QStandardItemModel
 from PySide6.QtWidgets import (QButtonGroup, QCompleter, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
                                QPushButton, QScrollArea, QStackedWidget, QTextBrowser, QVBoxLayout, QWidget)
 
-from .. import bidi, buildplan, combat, crafting, glossary, guides, market, plan, progress, quests, updater, wishlist
+from .. import bidi, buildplan, combat, crafting, glossary, guides, links, market, plan, progress, quests, updater, wishlist
 from ..i18n import I18n
 from . import terms, theme
-from .controls import Section, Segmented, Stepper, rtl_buttons
+from .controls import PlainLabel, Section, Segmented, Stepper, rtl_buttons
 from .glass import GlassDialog
 
 PAGES = ("train", "calc", "build", "quests", "crafting", "town", "prices", "exp", "progress", "more")
@@ -39,7 +39,7 @@ def clear(layout):
 
 
 def tag(text: str, kind: str = "Tag") -> QLabel:
-    lb = QLabel(text, objectName=kind)
+    lb = PlainLabel(text, objectName=kind)
     lb.setAlignment(Qt.AlignCenter)
     return lb
 
@@ -507,7 +507,7 @@ class ToolsDialog(GlassDialog):
         row.addWidget(pic, 0, Qt.AlignTop)
         col = QVBoxLayout()
         col.setSpacing(3)
-        name = QLabel(self._p(f"{m.name} · {t('lv_short', n=m.level)}"), objectName="CardName")
+        name = PlainLabel(self._p(f"{m.name} · {t('lv_short', n=m.level)}"), objectName="CardName")
         col.addWidget(name)
         col.addWidget(self._label(s.map, "CardSub"))
         # two short rows of tags: why it's picked, then the numbers (one long row pushed the card wider)
@@ -810,7 +810,7 @@ class ToolsDialog(GlassDialog):
         col.setSpacing(4)
         outer.addLayout(col, 1)
         top = QHBoxLayout()
-        name = QLabel(self._p(q.name), objectName="CardName")
+        name = PlainLabel(self._p(q.name), objectName="CardName")
         name.setWordWrap(True)
         top.addWidget(name, 1)
         top.addWidget(tag(self._p(t("lv_short", n=q.level)), "Tag"))
@@ -882,7 +882,7 @@ class ToolsDialog(GlassDialog):
             e = self.kb.get(mk) or {}
             lv = (e.get("props") or {}).get("Level")
             src = self.kb.badge_source(mk, key)
-            mobs.append(f"<a href='{mk}' style='color: {c.get('accent', theme.ORANGE_DEEP)}; text-decoration: none;'>"
+            mobs.append(f"<a href='{html.escape(mk)}' style='color: {c.get('accent', theme.ORANGE_DEEP)}; text-decoration: none;'>"
                         f"{html.escape(e.get('name', mk))}</a>" + (f" Lv. {lv}" if lv else "")
                         + (f" <span style='color: {colors[src]};'>({html.escape(self.t('drop_' + src))})</span>" if src else ""))
         if not mobs:
@@ -909,7 +909,7 @@ class ToolsDialog(GlassDialog):
         col.setSpacing(4)
         outer.addLayout(col, 1)
         top = QHBoxLayout()
-        title = QLabel(self._p(q.name if q else name), objectName="CardName")
+        title = PlainLabel(self._p(q.name if q else name), objectName="CardName")
         title.setWordWrap(True)
         top.addWidget(title, 1)
         if q:
@@ -1208,7 +1208,7 @@ class ToolsDialog(GlassDialog):
         col.addWidget(self.fm_label)
         web = QPushButton(self._p(t("price_open_site")), objectName="Link")
         web.setCursor(Qt.PointingHandCursor)
-        web.clicked.connect(lambda _=False, n=name: __import__("webbrowser").open(market.page_url(n)))
+        web.clicked.connect(lambda _=False, n=name: links.open_url(market.page_url(n)))
         col.addWidget(web, 0, (Qt.AlignRight if t.rtl else Qt.AlignLeft) | Qt.AlignAbsolute)
         self.price_box.addWidget(card)
         self._price_for = name
@@ -1446,7 +1446,7 @@ class ToolsDialog(GlassDialog):
         col.setSpacing(4)
         outer.addLayout(col, 1)
         top = QHBoxLayout()
-        name = QLabel(self._p(title), objectName="CardName")
+        name = PlainLabel(self._p(title), objectName="CardName")
         name.setWordWrap(True)
         top.addWidget(name, 1)
         if done:

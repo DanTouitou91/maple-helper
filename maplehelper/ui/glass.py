@@ -88,6 +88,7 @@ class GlassDialog(QDialog):
         bl = QHBoxLayout(bar)
         bl.setContentsMargins(0, 0, 0, 4)
         self.title_label = QLabel(title, objectName="Title")
+        self.title_label.setTextFormat(Qt.PlainText)      # a character's name may be in it
         bl.addWidget(self.title_label)
         bl.addStretch(1)
         self.close_btn = QToolButton(objectName="IconClose", text=theme.ICON["close"])

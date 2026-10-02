@@ -1,15 +1,21 @@
 """Chat building blocks: message bubbles, entity cards, system lines."""
 from __future__ import annotations
 
-import webbrowser
+import html
 
 from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QVBoxLayout, QWidget
 
-from .. import bidi, quick
+from .. import bidi, links, quick
 from ..kb import KnowledgeBase
 from . import theme
+from .controls import PlainLabel
+
+
+def plain_tip(text: str) -> str:
+    """A tooltip that shows the text as is (Qt reads a tooltip as HTML when it looks like one)."""
+    return f"<span>{html.escape(text)}</span>"
 
 
 def _label(text: str = "", name: str | None = None, rich: bool = False, wrap: bool = True) -> QLabel:
@@ -17,6 +23,7 @@ def _label(text: str = "", name: str | None = None, rich: bool = False, wrap: bo
     if name:
         lb.setObjectName(name)
     lb.setTextFormat(Qt.RichText if rich else Qt.PlainText)
+    lb.setOpenExternalLinks(False)
     lb.setWordWrap(wrap)
     lb.setTextInteractionFlags(Qt.TextSelectableByMouse)
     lb.setText(text)
@@ -33,7 +40,7 @@ class Bubble(QFrame):
         lay = QVBoxLayout(self)
         lay.setContentsMargins(13, 8, 13, 9)
         if tag:
-            t = QLabel("↩ " + tag, objectName="BubbleTag")
+            t = PlainLabel("↩ " + tag, objectName="BubbleTag")
             lay.addWidget(t)
         self.label = _label(rich=True)
         self.label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
@@ -91,6 +98,7 @@ class SystemLine(QLabel):
     def __init__(self, text: str):
         super().__init__(bidi.plain(text))
         self.setObjectName("SystemLine")
+        self.setTextFormat(Qt.PlainText)
         self.setWordWrap(True)
         self.setAlignment(Qt.AlignHCenter)
 
@@ -108,7 +116,7 @@ class NoticeCard(QFrame):
         lay.setContentsMargins(12, 8, 12, 8)
         lay.setSpacing(10)
         lay.addWidget(QLabel(theme.ICON["info"], objectName="InfoIcon"), 0, Qt.AlignVCenter)
-        self.msg = QLabel(objectName="InfoText")
+        self.msg = PlainLabel(objectName="InfoText")
         self.msg.setWordWrap(True)
         lay.addWidget(self.msg, 1)
         self.btn = QPushButton(objectName="Link")
@@ -135,7 +143,7 @@ class SessionCard(QFrame):
         col.setContentsMargins(14, 10, 14, 10)
         col.setSpacing(3)
         self._align = (Qt.AlignRight if rtl else Qt.AlignLeft) | Qt.AlignAbsolute
-        head = QLabel(bidi.plain(title, rtl), objectName="CardName")
+        head = PlainLabel(bidi.plain(title, rtl), objectName="CardName")
         head.setAlignment(self._align)
         col.addWidget(head)
         for ln in lines:
@@ -154,7 +162,7 @@ class SessionCard(QFrame):
             col.addWidget(self._toggle)
 
     def _line(self, text: str, name: str = "CardStat") -> QLabel:
-        lb = QLabel(bidi.plain(text, self._rtl), objectName=name)
+        lb = PlainLabel(bidi.plain(text, self._rtl), objectName=name)
         lb.setWordWrap(True)
         lb.setAlignment(self._align)
         return lb
@@ -256,7 +264,7 @@ class EntityCard(Selectable, QFrame):
         self._init_selectable(key)
         self.setToolTip("לחצו כדי לשאול עליה" if lang == "he" else "Tap to ask about it")
         e = kb.get(key) or {}
-        self.url = e.get("url")
+        self.url = links.safe_url(e.get("url"))
         he = lang == "he"
 
         row = QHBoxLayout(self)
@@ -306,7 +314,7 @@ class EntityCard(Selectable, QFrame):
             link = QToolButton(objectName="Icon", text=theme.ICON["open"])
             link.setCursor(Qt.PointingHandCursor)
             link.setToolTip("NiaMeowDB")
-            link.clicked.connect(lambda: webbrowser.open(self.url))
+            link.clicked.connect(lambda: links.open_url(self.url))
             bl.addWidget(link)
         if key.startswith("item/"):
             self._star = QToolButton(objectName="Icon")
@@ -427,8 +435,8 @@ class ProfileCard(QFrame):
         row.addWidget(self.avatar)
         col = QVBoxLayout()
         col.setSpacing(1)
-        self.name = QLabel(objectName="ProfileName")
-        self.meta = QLabel(objectName="ProfileMeta")
+        self.name = PlainLabel(objectName="ProfileName")
+        self.meta = PlainLabel(objectName="ProfileMeta")
         col.addWidget(self.name)
         col.addWidget(self.meta)
         from .plancard import ExpBar
@@ -511,9 +519,9 @@ class CharacterRow(QFrame):
         col = QVBoxLayout()
         col.setSpacing(0)
         align = (Qt.AlignRight if rtl else Qt.AlignLeft) | Qt.AlignAbsolute | Qt.AlignVCenter
-        name = QLabel(bidi.plain(c.name, rtl), objectName="ProfileName")
+        name = PlainLabel(bidi.plain(c.name, rtl), objectName="ProfileName")
         name.setAlignment(align)
-        meta = QLabel(f"Lv. {c.level} · {c.job}", objectName="ProfileMeta")
+        meta = PlainLabel(f"Lv. {c.level} · {c.job}", objectName="ProfileMeta")
         meta.setAlignment(align)
         col.addWidget(name)
         col.addWidget(meta)
@@ -557,7 +565,7 @@ class EntityTile(Selectable, QFrame):
         self._init_selectable(key)
         e = kb.get(key) or {}
         self.url = e.get("url")
-        self.setToolTip(e.get("name", key))
+        self.setToolTip(plain_tip(e.get("name", key)))
         row = QHBoxLayout(self)
         row.setContentsMargins(8, 6, 8, 6)
         row.setSpacing(8)
@@ -566,7 +574,7 @@ class EntityTile(Selectable, QFrame):
         pic.setAlignment(Qt.AlignCenter)
         pic.setPixmap(theme.thumb(kb.picture(key), 32))
         row.addWidget(pic)
-        name = QLabel(e.get("name", key), objectName="TileName")
+        name = PlainLabel(e.get("name", key), objectName="TileName")
         name.setWordWrap(True)
         from PySide6.QtWidgets import QApplication
         rtl = QApplication.layoutDirection() == Qt.RightToLeft
@@ -595,7 +603,7 @@ class TileGrid(QFrame):
         outer.setSpacing(4)
         if title:
             rtl = QApplication.layoutDirection() == Qt.RightToLeft
-            t = QLabel(bidi.plain(title, rtl), objectName="TileGridTitle")
+            t = PlainLabel(bidi.plain(title, rtl), objectName="TileGridTitle")
             t.setAlignment((Qt.AlignRight if rtl else Qt.AlignLeft) | Qt.AlignAbsolute | Qt.AlignVCenter)
             t.setContentsMargins(4, 0, 4, 2)
             outer.addWidget(t)
@@ -633,10 +641,10 @@ class DropGroupCard(QFrame):
         align = (Qt.AlignRight if rtl else Qt.AlignLeft) | Qt.AlignAbsolute | Qt.AlignVCenter
         col = QVBoxLayout()
         col.setSpacing(0)
-        name = QLabel(e.get("name", monster), objectName="CardName")
+        name = PlainLabel(e.get("name", monster), objectName="CardName")
         name.setAlignment(align)
         lv = (e.get("props") or {}).get("Level")
-        sub = QLabel(f"Lv. {lv}" if lv else "", objectName="CardSub")
+        sub = PlainLabel(f"Lv. {lv}" if lv else "", objectName="CardSub")
         sub.setAlignment(align)
         col.addWidget(name)
         col.addWidget(sub)

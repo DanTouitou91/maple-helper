@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 import statistics
 import time
@@ -14,6 +15,7 @@ FM_URL = "https://meowdb.com/msclassic/api/market-listings/browse"
 FM_PAGE = "https://meowdb.com/msclassic/free-market"
 UA = "Maple Helper (https://github.com/Amitaflalo1995/maple-helper)"
 CACHE_SECONDS = 600
+MAX_PRICE = 10_000_000_000      # mesos; the site's JSON is not ours, so a price must also be a sane number
 _cache: dict[str, tuple[float, dict | None]] = {}
 
 
@@ -54,16 +56,23 @@ class Market:
     latest: float | None = None                 # unix time of the newest report
 
 
-def summarize(rows: list[dict], name: str) -> Market:
+def _num(v, hi: float) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) and 0 < v < hi
+
+
+def summarize(rows, name: str) -> Market:
+    """The listings of one item in the site's rows; rows that aren't what the site documents are skipped."""
     prices, times = [], []
-    for r in rows:
-        if (r.get("itemName") or "").strip().lower() != name.strip().lower():
+    for r in rows if isinstance(rows, list) else []:
+        if not isinstance(r, dict) or not isinstance(r.get("itemName"), str):
+            continue
+        if r["itemName"].strip().lower() != name.strip().lower():
             continue                            # the search is "contains": keep this exact item
         each = r.get("priceEach") or r.get("price")
-        if isinstance(each, (int, float)) and each > 0:
+        if _num(each, MAX_PRICE):
             prices.append(int(each))
         t = r.get("createdAt")
-        if isinstance(t, (int, float)):
+        if _num(t, 1e14):
             times.append(t / 1000 if t > 1e11 else t)
         elif isinstance(t, str):
             try:
@@ -86,9 +95,9 @@ def free_market(name: str, timeout: float = 10) -> Market | None:
         req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "application/json"})
         with urllib.request.urlopen(req, timeout=timeout) as r:
             data = json.loads(r.read().decode("utf-8"))
+        out = summarize(data.get("rows") if isinstance(data, dict) else None, name)
     except Exception:
         return None
-    out = summarize(data.get("rows") or [], name)
     _cache[name.lower()] = (time.time(), out)
     return out
 

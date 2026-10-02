@@ -8,6 +8,7 @@ from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QToolButton, QVBoxLay
 from .. import bidi
 from ..store import ASSETS
 from . import theme
+from .controls import PlainLabel
 from .glass import SHADOW, paint_glass
 
 MARGIN = 16
@@ -61,11 +62,11 @@ class Toast(QWidget):
         brand = QLabel("Maple Helper", objectName="Brand")
         brand.setAlignment((Qt.AlignRight if rtl else Qt.AlignLeft) | Qt.AlignAbsolute)
         col.addWidget(brand)
-        t = QLabel(bidi.plain(title, rtl), objectName="Title")
+        t = PlainLabel(bidi.plain(title, rtl), objectName="Title")
         t.setWordWrap(True)
         col.addWidget(t)
         if message:
-            b = QLabel(bidi.plain(message, rtl), objectName="Body")
+            b = PlainLabel(bidi.plain(message, rtl), objectName="Body")
             b.setWordWrap(True)
             col.addWidget(b)
         row.addLayout(col, 1)

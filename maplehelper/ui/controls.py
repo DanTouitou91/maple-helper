@@ -108,6 +108,15 @@ class Segmented(QFrame):
         return b.property("value") if b else None
 
 
+class PlainLabel(QLabel):
+    """A label for text the app didn't write (a KB name, an AI string, a release tag): never read as HTML.
+    (QLabel's default guesses: "<img src=...>" in a name would load the picture, "<span style=...>" restyle it.)"""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setTextFormat(Qt.PlainText)
+
+
 class Section(QFrame):
     """A grouped card of rows (iOS Settings): label on the leading side, control on the trailing side."""
 
@@ -119,7 +128,7 @@ class Section(QFrame):
         outer.setSpacing(6)
         self.header = None
         if header:
-            self.header = QLabel(objectName="SectionHeader")
+            self.header = PlainLabel(objectName="SectionHeader")
             self.set_header(header)
             outer.addWidget(self.header)
         self.card = QFrame(objectName="Group")
@@ -143,11 +152,11 @@ class Section(QFrame):
         lay.setContentsMargins(0, 8, 0, 8)
         col = QVBoxLayout()
         col.setSpacing(1)
-        lb = QLabel(bidi.plain(label, self.rtl), objectName="RowLabel")
+        lb = PlainLabel(bidi.plain(label, self.rtl), objectName="RowLabel")
         lb.setWordWrap(True)
         col.addWidget(lb)
         if hint:
-            hl = QLabel(bidi.plain(hint, self.rtl), objectName="RowHint")
+            hl = PlainLabel(bidi.plain(hint, self.rtl), objectName="RowHint")
             hl.setWordWrap(True)
             col.addWidget(hl)
         lay.addLayout(col, 1)

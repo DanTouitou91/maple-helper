@@ -8,7 +8,7 @@ from .. import bidi
 from ..i18n import STRINGS, I18n
 from ..kb import KnowledgeBase
 from . import theme
-from .controls import Section, rtl_buttons
+from .controls import PlainLabel, Section, rtl_buttons
 from .glass import GlassDialog
 from .widgets import EntityCard, Selectable
 
@@ -61,7 +61,7 @@ class ChangeCard(Selectable, QFrame):
         col.setSpacing(2)
         align = (Qt.AlignRight if rtl else Qt.AlignLeft) | Qt.AlignAbsolute
         for text, name in [(r["name"], "CardName"), (sub, "CardSub")] + [(ln, "CardStat") for ln in lines]:
-            lb = QLabel(text if name == "CardName" else bidi.plain(text, rtl), objectName=name)
+            lb = PlainLabel(text if name == "CardName" else bidi.plain(text, rtl), objectName=name)
             lb.setWordWrap(True)
             lb.setAlignment(align)
             col.addWidget(lb)
