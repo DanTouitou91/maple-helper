@@ -145,8 +145,9 @@ def test_session_summaries_default_on(isolated_store):
 def test_auto_update_off_only_announces_a_new_version(app_cls, monkeypatch, auto_update, expect):
     """Windows: a new version is downloaded and installed in the background, unless the player turned that off:
     then the same notice as on macOS (a toast and a tray link), and nothing is downloaded."""
-    from maplehelper import updater
+    from maplehelper import osapi, updater
     monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(osapi, "IS_MAC", False)       # the Windows build: macOS always gets the notice
     monkeypatch.setattr(updater, "newer_release", lambda current: ("9.9.9", "https://github.com/x/releases"))
     monkeypatch.setattr(updater, "update_kb", lambda before_swap=None: False)
     seen = []
