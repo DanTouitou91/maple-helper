@@ -275,6 +275,7 @@ STRINGS = {
                           "en": "Send {name} to whoever helps you with the app. It has no chats, screenshots or personal details."},
     "update_kb": {"he": "עדכן מאגר", "en": "Update database"},
     "kb_uptodate": {"he": "המאגר מעודכן", "en": "Database is up to date"},
+    "kb_checking": {"he": "כבר בודק אם יש עדכון למאגר…", "en": "Already checking for a database update…"},
     "kb_updated": {"he": "המאגר עודכן", "en": "Database updated"},
     "kb_update_failed": {"he": "עדכון מסד הנתונים נכשל. ננסה שוב מאוחר יותר.",
                          "en": "Couldn't update the game database. We'll try again later."},

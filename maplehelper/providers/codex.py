@@ -17,7 +17,7 @@ import threading
 from pathlib import Path
 
 from .base import CREATE_NEW_CONSOLE, CREATE_NO_WINDOW, RUN_TIMEOUT, Deadline, Provider, RawResult, classify_error, \
-    child_env, find_posix, find_windows_exe, http_ok, in_terminal, run_installer
+    child_env, find_posix, find_windows_exe, http_ok, in_terminal, reap, run_installer
 
 INSTALL_CMD = "irm https://chatgpt.com/codex/install.ps1 | iex"
 INSTALL_CMD_MAC = "curl -fsSL https://chatgpt.com/codex/install.sh | sh"
@@ -273,8 +273,13 @@ class CodexBackend:
         # the screenshot must be on the command line, so a process can't be started before the question
         pass
 
+    def stop_warm(self) -> None:
+        pass                         # nothing waits between questions (see prewarm)
+
     def shutdown(self) -> None:
+        proc = self._proc
         self.cancel()
+        reap(proc)
 
     def cancel(self) -> None:
         if self._proc and self._proc.poll() is None:

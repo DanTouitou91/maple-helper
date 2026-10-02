@@ -56,6 +56,9 @@ class FakeBrain:
     def cancel(self):
         self.cancelled.set()
 
+    def begin(self):
+        pass
+
 
 @pytest.fixture
 def overlay(qapp, isolated_store, kb):

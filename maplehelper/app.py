@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import sys
 import threading
+import time
 import webbrowser
 
 from PySide6.QtCore import QLockFile, QObject, Qt, QTimer, Signal
@@ -473,18 +474,18 @@ class MapleHelperApp:
 
         self._update_kb(lambda result, before: self.kb_updated(before) if result else None)
 
-    def _update_kb(self, finished):
+    def _update_kb(self, finished) -> bool:
         """Check for a newer KB in the background; finished(result, version before) runs on the GUI thread
-        (result as updater.update_kb returns it). One check at a time: both would unpack into the same folder."""
+        (result as updater.update_kb returns it). One check at a time: both would unpack into the same folder.
+        False when a check is already running."""
         if getattr(self, "_kb_updating", False):
-            return
+            return False
         self._kb_updating = True
 
         def work():
             before = updater.local_version()
             try:
-                # the warm AI process runs inside the KB folder: stopped only once a verified update replaces it
-                result = updater.update_kb(before_swap=self.brain.shutdown)
+                result = updater.update_kb(before_swap=self._before_kb_swap)
             finally:
                 self._kb_updating = False
             if result:
@@ -492,6 +493,21 @@ class MapleHelperApp:
                 self.main_thread.call.emit(self.reload_kb)
             self.main_thread.call.emit(lambda: finished(result, before))
         threading.Thread(target=work, daemon=True).start()
+        return True
+
+    KB_SWAP_WAIT = 120      # seconds an update waits for the answer or screenshot read in progress
+
+    def _before_kb_swap(self) -> bool:
+        """On the update thread, right before the new KB replaces the old: an answer or a screenshot read works
+        inside the KB folder, so wait for it to end, then stop only the warm process. Still busy after
+        KB_SWAP_WAIT: False, and the unpacked update is swapped in on the next check."""
+        end = time.monotonic() + self.KB_SWAP_WAIT
+        while self.overlay.busy or getattr(self.overlay, "_syncing", False):     # plain bools: safe off the GUI thread
+            if time.monotonic() > end:
+                return False
+            time.sleep(0.5)
+        self.brain.stop_warm()
+        return True
 
     def announce_update(self, version: str, url: str):
         if getattr(self, "_mac_announced", None) == version:
@@ -574,7 +590,8 @@ class MapleHelperApp:
                 self.kb_updated(before, interactive=True)
             else:
                 self.toast(t("kb_uptodate") if result is False else t("kb_update_failed"))
-        self._update_kb(finished)
+        if not self._update_kb(finished):
+            self.toast(t("kb_checking"))       # a check (the 3-hourly one, or an earlier click) is already running
 
     def kb_updated(self, before: str, interactive: bool = False):
         """Tell the player exactly what the update changed (patch notes), not just that it happened."""

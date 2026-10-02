@@ -1049,6 +1049,7 @@ class Overlay(QWidget):
         # one thread per question: both go once it ends
         self._thread.finished.connect(self._worker.deleteLater)
         self._thread.finished.connect(self._thread.deleteLater)
+        self.brain.begin()          # here, not in the worker: a Stop pressed before it runs still counts
         self._thread.start()
         return True
 
@@ -1209,6 +1210,7 @@ class Overlay(QWidget):
         self._sync_worker.done.connect(self._sync_thread.quit)
         self._sync_thread.finished.connect(self._sync_worker.deleteLater)
         self._sync_thread.finished.connect(self._sync_thread.deleteLater)
+        self.brain.begin()
         self._sync_thread.start()
 
     def _on_sync_done(self, ans: Answer):

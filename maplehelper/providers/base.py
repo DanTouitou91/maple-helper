@@ -102,6 +102,15 @@ def http_ok(url: str, headers: dict) -> bool:
         return False
 
 
+def reap(proc: subprocess.Popen | None, timeout: float = 5) -> None:
+    """Wait for a killed process to exit: Windows frees its folder (the KB) only once it has."""
+    if proc is not None:
+        try:
+            proc.wait(timeout=timeout)
+        except (subprocess.TimeoutExpired, OSError):
+            pass
+
+
 class Deadline:
     """Kills a process that runs past its time limit; .expired says afterwards whether it did."""
 

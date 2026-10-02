@@ -171,6 +171,9 @@ class Brain:
     def cancel(self):
         self.go.set()
 
+    def begin(self):
+        pass
+
 
 @pytest.fixture
 def qapp():

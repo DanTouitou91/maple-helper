@@ -32,7 +32,7 @@ Knowledge base: the current directory is the full NiaMeowDB (meowdb.com) databas
 - Never invent facts, numbers, drops or locations. If the data does not say, say so briefly.
 
 Which monsters drop something: drops.tsv (monster, level, key, item, item type, item key, source) lists every
-monster→item drop; source "classic" = confirmed in Classic, "msea" = MSEA reference only. Grep it for the item name or
+monster→item drop. Its source: "classic" = confirmed in Classic, "msea" = MSEA reference only. Grep it for the item name or
 the item type (e.g. "Throwing Star", "Scroll", "Potion"). Answer grouped per monster
 (monster → the items it drops), lowest level first, and return the grouping as META "drop_groups".
 
@@ -60,6 +60,8 @@ After the answer, output a line containing only @@META@@ followed by one JSON ob
   lowest monster level first, max 8 groups.
 - profile_update: only facts the player stated or the screenshot clearly shows: "level" (int), "job", "base_class", "map", "quests_started" [..], "quests_completed" [..], "exp_percent" (number 0-100, the EXP bar's percentage, only if the screenshot shows it), "stats" (only if the in-game stat window is open in the screenshot: {{"acc": total Accuracy, "dmg_min": and "dmg_max": the attack/damage range it shows, "hp": max HP, "mp": max MP}}), "note" (a lasting preference or goal). Empty object if nothing changed.
 """
+
+DROP_SOURCE = (", source)", ' Its source: "classic" = confirmed in Classic, "msea" = MSEA reference only.')
 
 LENGTH = {
     "short": "Keep it short: at most 6 short lines unless the player asks for detail.",
@@ -199,6 +201,7 @@ class Brain:
         self.length = length
         self.api_key = api_key
         self.cancelled = False         # the player pressed Stop on the question being answered
+        self._begun = False            # begin() ran for the next ask(): its Stop flag is already fresh
         self.no_ai = False             # no AI connected yet (settings "no_ai"): nothing may start its CLI
         self._provider = providers.get(provider)
         self.backend = self._provider.backend(self)
@@ -216,7 +219,10 @@ class Brain:
             self._provider, self.backend = new, new.backend(self)
 
     def system_prompt(self) -> str:
-        return SYSTEM_PROMPT.format(length=LENGTH.get(self.length, LENGTH["short"]))
+        text = SYSTEM_PROMPT.format(length=LENGTH.get(self.length, LENGTH["short"]))
+        if not self.kb.ensure_drop_table():      # an older table the app may not rewrite (installed app): no source
+            text = text.replace(DROP_SOURCE[0], ")").replace(DROP_SOURCE[1], "")
+        return text
 
     def prewarm(self) -> None:
         """Get the next question's process ready now, where the provider supports it."""
@@ -225,6 +231,10 @@ class Brain:
 
     def shutdown(self) -> None:
         self.backend.shutdown()
+
+    def stop_warm(self) -> None:
+        """Stop only the process waiting for the next question (a KB update swaps the folder it runs in)."""
+        self.backend.stop_warm()
 
     def available(self) -> bool:
         return not self.no_ai and self.backend.exe is not None
@@ -235,15 +245,23 @@ class Brain:
         self.cancelled = True
         self.backend.cancel()
 
+    def begin(self) -> None:
+        """A question is about to start (GUI thread, before its worker): a Stop from here on belongs to it,
+        even one pressed before the worker reaches ask()."""
+        self.cancelled = False
+        self._begun = True
+
     def ask(self, question: str, character: Character | None, history: History | None,
             screenshot_jpeg: bytes | None, on_delta=None, focus=None, on_status=None) -> Answer:
         """Blocking call; on_delta(visible_text_so_far) is invoked while the answer streams, on_status(code)
         while the AI looks things up ("search", "read:<kb key>"; Claude only)."""
+        if not self._begun:
+            self.cancelled = False            # called without begin(): an earlier Stop doesn't carry over
+        self._begun = False
         if self.no_ai:
             return Answer(error="no_ai")      # the chat offers to connect one
         if not self.backend.exe:
             return Answer(error="not_installed")
-        self.cancelled = False
         self.kb.ensure_drop_table()
         prompt = build_prompt(question, character, history, self.kb, screenshot_jpeg is not None, self.length, focus)
         raw_delta = (lambda raw: on_delta(raw.split(META)[0].strip())) if on_delta else None

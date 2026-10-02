@@ -92,6 +92,30 @@ def test_drop_table_is_written_once_when_missing(kb_copy):
     assert not table.exists()
 
 
+def test_an_older_drop_table_without_the_source_column_is_rebuilt(kb_copy):
+    """An unpacked update makes an old 6-column table newer than index.json: the header decides, not the time."""
+    from maplehelper.kb import KnowledgeBase
+    table = kb_copy / "drops.tsv"
+    table.write_text("monster\tmonster_level\tmonster_key\titem\titem_type\titem_key\nSnail\t1\tmonster/1\tX\tEtc\titem/1",
+                     encoding="utf-8")
+    assert KnowledgeBase(kb_copy).ensure_drop_table() is True
+    assert table.read_text(encoding="utf-8").split("\n")[0].endswith("\titem_key\tsource")
+
+
+def test_the_prompt_promises_the_source_column_only_when_the_table_has_it(kb_copy, monkeypatch):
+    from maplehelper import kb as kbmod
+    from maplehelper.brain import Brain
+    (kb_copy / "drops.tsv").write_text("monster\tmonster_level\tmonster_key\titem\titem_type\titem_key\n",
+                                       encoding="utf-8")
+    assert "item key, source)" in Brain(kbmod.KnowledgeBase(kb_copy)).system_prompt()      # rebuilt with it
+    (kb_copy / "drops.tsv").write_text("monster\tmonster_level\tmonster_key\titem\titem_type\titem_key\n",
+                                       encoding="utf-8")
+    monkeypatch.setattr(kbmod.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(kbmod, "BUNDLED_KB", kb_copy)             # the installed app's copy: never rewritten
+    prompt = Brain(kbmod.KnowledgeBase(kb_copy)).system_prompt()
+    assert "item key)" in prompt and "source" not in prompt.split("drops.tsv")[1].split("Grep")[0]
+
+
 def test_drop_table_never_written_into_the_installed_app(kb_copy, monkeypatch):
     from maplehelper import kb as kbmod
     monkeypatch.setattr(kbmod.sys, "frozen", True, raising=False)

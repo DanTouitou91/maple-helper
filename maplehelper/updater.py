@@ -10,6 +10,7 @@ import re
 import io
 import json
 import shutil
+import time
 import urllib.error
 import urllib.request
 import zipfile
@@ -102,10 +103,27 @@ def _get(url: str, timeout: int = 30) -> bytes | None:
         return None
 
 
+RENAME_TRIES, RENAME_WAIT = 5, 0.5
+
+
+def _rename(src: Path, dst: Path) -> None:
+    """Windows can hold a just-stopped process's handles on the folder a moment longer: try again before giving up."""
+    for i in range(RENAME_TRIES):
+        try:
+            src.rename(dst)
+            return
+        except OSError:
+            if i == RENAME_TRIES - 1:
+                raise
+            time.sleep(RENAME_WAIT)
+
+
 def update_kb(before_swap=None) -> bool | None:
     """Download a newer knowledge base if one is published.
     True: updated; False: already the newest; None: failed (offline, a bad download, the KB folder in use).
-    before_swap() runs right before the verified new KB replaces the current one: stop what works inside it."""
+    before_swap() runs right before the verified new KB replaces the current one: stop what works inside it.
+    When it returns False (still busy), the unpacked update waits in kb.new and the next check swaps it in
+    without downloading it again."""
     if not MANIFEST_URL:
         return False
     raw = _get(MANIFEST_URL, timeout=15)
@@ -119,35 +137,48 @@ def update_kb(before_swap=None) -> bool | None:
         return None
     if _kb_version(manifest.get("version", "")) <= _kb_version(local_version()):
         return False
-    data = _get(manifest["url"], timeout=300)
-    if not data or hashlib.sha256(data).hexdigest() != manifest.get("sha256"):
-        return None
     tmp = USER_KB.with_name("kb.new")
-    shutil.rmtree(tmp, ignore_errors=True)
+    staged = USER_KB.with_name("kb.new.ready")        # this exact release, verified and unpacked in kb.new
+    stamp = f"{manifest['version']} {manifest.get('sha256')}"
     try:
-        with zipfile.ZipFile(io.BytesIO(data)) as z:
-            z.extractall(tmp)
-        meta_path = tmp / "meta.json"
-        meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
-        meta = meta if isinstance(meta, dict) else {}
-        meta["version"] = manifest["version"]
-        meta_path.write_text(json.dumps(meta, indent=1), encoding="utf-8")
-        ok = (tmp / "index.json").exists()
-    except (zipfile.BadZipFile, OSError, ValueError):     # a broken zip or meta.json, a full disk
-        ok = False
-    if not ok:
+        ready = staged.read_text(encoding="utf-8") == stamp and (tmp / "index.json").exists()
+    except OSError:
+        ready = False
+    if not ready:
+        staged.unlink(missing_ok=True)
+        data = _get(manifest["url"], timeout=300)
+        if not data or hashlib.sha256(data).hexdigest() != manifest.get("sha256"):
+            return None
         shutil.rmtree(tmp, ignore_errors=True)
+        try:
+            with zipfile.ZipFile(io.BytesIO(data)) as z:
+                z.extractall(tmp)
+            meta_path = tmp / "meta.json"
+            meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
+            meta = meta if isinstance(meta, dict) else {}
+            meta["version"] = manifest["version"]
+            meta_path.write_text(json.dumps(meta, indent=1), encoding="utf-8")
+            ok = (tmp / "index.json").exists()
+        except (zipfile.BadZipFile, OSError, ValueError):     # a broken zip or meta.json, a full disk
+            ok = False
+        if not ok:
+            shutil.rmtree(tmp, ignore_errors=True)
+            return None
+    if before_swap and before_swap() is False:
+        try:
+            staged.write_text(stamp, encoding="utf-8")       # still in use: swapped in on the next check
+        except OSError:
+            shutil.rmtree(tmp, ignore_errors=True)
         return None
-    if before_swap:
-        before_swap()
+    staged.unlink(missing_ok=True)
     # swap by renames: on Windows a folder another process works in (the AI runs inside the KB)
     # can't be removed or renamed; then keep the current KB intact and try again next time
     old = USER_KB.with_name("kb.old")
     shutil.rmtree(old, ignore_errors=True)
     try:
         if USER_KB.exists():
-            USER_KB.rename(old)
-        tmp.rename(USER_KB)
+            _rename(USER_KB, old)
+        _rename(tmp, USER_KB)
     except OSError:
         if old.exists() and not USER_KB.exists():
             old.rename(USER_KB)

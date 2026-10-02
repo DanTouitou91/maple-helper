@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+import threading
 from functools import cached_property
 from pathlib import Path
 
@@ -48,7 +49,8 @@ def _norm(s: str) -> str:
 class KnowledgeBase:
     def __init__(self, root: Path | None = None):
         self.root = root or kb_dir()
-        self._drop_table_checked = False
+        self._drop_table: bool | None = None         # drops.tsv checked: whether it has the source column
+        self._drop_lock = threading.Lock()
         self.entities: dict[str, dict] = {}
         idx = self.root / "index.json"
         if idx.exists():
@@ -251,24 +253,35 @@ class KnowledgeBase:
         ordered = sorted(groups, key=self._level)[:limit]
         return [{"monster": m, "items": groups[m]} for m in ordered]
 
-    def ensure_drop_table(self) -> None:
+    DROP_HEADER = "monster\tmonster_level\tmonster_key\titem\titem_type\titem_key\tsource"
+
+    def ensure_drop_table(self) -> bool:
         """Write drops.tsv next to index.json so Claude can grep 'which monsters drop X' in one step.
 
-        Releases ship it, so this fills in a fresh scrape; checked once per loaded KB. Never written into the
-        installed app (a signed macOS bundle, Program Files): without it the prompt's pre-fetched drop groups
-        still answer."""
-        if self._drop_table_checked:
-            return
-        self._drop_table_checked = True
-        if getattr(sys, "frozen", False) and self.root == BUNDLED_KB:
-            return
+        Releases ship it, so this fills in a fresh scrape or an older table without the source column (an
+        unpacked update is newer than index.json however old its table is); checked once per loaded KB.
+        Never written into the installed app (a signed macOS bundle, Program Files): without it the prompt's
+        pre-fetched drop groups still answer. True when the table on disk has the source column."""
+        with self._drop_lock:              # the warm process's prompt and a question may both ask
+            if self._drop_table is None:
+                self._drop_table = self._write_drop_table()
+            return self._drop_table
+
+    def _write_drop_table(self) -> bool:
         path = self.root / "drops.tsv"
         idx = self.root / "index.json"
         try:
-            if path.exists() and idx.exists() and path.stat().st_mtime >= idx.stat().st_mtime:
-                return
+            with path.open(encoding="utf-8") as f:
+                current = f.readline().rstrip("\r\n") == self.DROP_HEADER
+        except OSError:
+            current = False
+        if getattr(sys, "frozen", False) and self.root == BUNDLED_KB:
+            return current
+        try:
+            if current and idx.exists() and path.stat().st_mtime >= idx.stat().st_mtime:
+                return True
             # source: "classic" = confirmed by Classic players, "msea" = the MSEA reference list only
-            lines = ["monster\tmonster_level\tmonster_key\titem\titem_type\titem_key\tsource"]
+            lines = [self.DROP_HEADER]
             for ikey, monsters in self.droppers.items():
                 it = self.get(ikey)
                 for m in monsters:
@@ -279,8 +292,9 @@ class KnowledgeBase:
             tmp = path.with_suffix(".tmp")       # Claude may grep it meanwhile: never a half-written table
             tmp.write_text("\n".join(lines), encoding="utf-8")
             tmp.replace(path)
+            return True
         except OSError:
-            pass
+            return current
 
     def drops_digest(self, key: str) -> str:
         drops = self.monster_drops(key)

@@ -243,8 +243,46 @@ def test_kb_in_use_is_kept_whole_and_retried_later(env, monkeypatch):
             raise PermissionError("in use")
         return real_rename(self, target)
     monkeypatch.setattr(type(user_kb), "rename", busy)
+    monkeypatch.setattr(updater, "RENAME_WAIT", 0)
     assert updater.update_kb() is None and still_old(user_kb)
     assert not user_kb.with_name("kb.new").exists()
+
+
+def test_a_folder_freed_a_moment_late_is_still_swapped(env, monkeypatch):
+    # Windows: the AI process was just killed and still holds the KB folder for a moment
+    user_kb, _, publish = env
+    publish()
+    real_rename, tries = type(user_kb).rename, []
+
+    def late(self, target):
+        if self == user_kb and len(tries) < 2:
+            tries.append(1)
+            raise PermissionError("in use")
+        return real_rename(self, target)
+    monkeypatch.setattr(type(user_kb), "rename", late)
+    monkeypatch.setattr(updater, "RENAME_WAIT", 0)
+    assert updater.update_kb() is True and not still_old(user_kb) and len(tries) == 2
+
+
+def test_a_busy_kb_defers_the_swap_without_downloading_again(env):
+    """An answer runs inside the KB: the verified update waits unpacked, and the next check swaps it in."""
+    user_kb, net, publish = env
+    publish()
+    assert updater.update_kb(before_swap=lambda: False) is None and still_old(user_kb)
+    assert (user_kb.with_name("kb.new") / "index.json").exists()
+    net[ZIP_URL] = None                                         # no second download
+    assert updater.update_kb(before_swap=lambda: True) is True and not still_old(user_kb)
+    assert updater.local_version() == "2026.02.01.0000"
+    assert not user_kb.with_name("kb.new").exists() and not user_kb.with_name("kb.new.ready").exists()
+
+
+def test_a_deferred_update_is_not_reused_for_another_release(env):
+    user_kb, net, publish = env
+    publish()
+    updater.update_kb(before_swap=lambda: False)
+    publish(version="2026.03.01.0000", data=make_zip({"index.json": '[{"key": "march"}]', "meta.json": "{}"}))
+    assert updater.update_kb() is True
+    assert json.loads((user_kb / "index.json").read_text(encoding="utf-8")) == [{"key": "march"}]
 
 
 def test_download_reports_progress(tmp_path, monkeypatch):

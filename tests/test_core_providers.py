@@ -1,5 +1,6 @@
 """AI runs end cleanly: a hung CLI times out, Stop kills it, a dead process never raises (real child processes)."""
 import json
+import subprocess
 import sys
 import threading
 import time
@@ -69,6 +70,15 @@ def test_a_chatty_stderr_never_stalls_claude(kb_copy, tmp_path, monkeypatch):
     assert ans.error is None and ans.text == "Hi."
 
 
+def test_stop_between_the_worker_start_and_ask_still_counts(kb_copy, tmp_path, monkeypatch):
+    b = brain_for(kb_copy, monkeypatch, "claude", fake_cli(tmp_path, f"sys.stdin.read(); print({RESULT!r})"))
+    b.begin()                                     # the chat, on the GUI thread, right before the worker starts
+    b.cancel()                                    # Stop pressed before the worker reached ask()
+    assert b.ask("hi", None, None, None).error == "cancelled"
+    b.begin()
+    assert b.ask("hi", None, None, None).text == "Hi."     # the next question starts fresh
+
+
 def test_the_next_question_is_not_cancelled(kb_copy, tmp_path, monkeypatch):
     b = brain_for(kb_copy, monkeypatch, "claude", fake_cli(tmp_path, f"sys.stdin.read(); print({RESULT!r})"))
     b.cancel()                                    # Stop pressed after an earlier answer
@@ -129,3 +139,32 @@ def test_deadline_reports_whether_it_fired():
     q.wait()
     d.cancel()
     assert not d.expired
+
+
+@pytest.mark.parametrize("provider", ["claude", "codex"])
+def test_shutdown_waits_for_the_killed_processes(kb_copy, tmp_path, monkeypatch, provider):
+    """Windows frees the KB folder only once a killed process has exited: the update renames it right after."""
+    exe = fake_cli(tmp_path, "sys.stdin.read(); time.sleep(60)")
+    b = brain_for(kb_copy, monkeypatch, provider, exe)
+    running = subprocess.Popen([exe], stdin=subprocess.PIPE)
+    b.backend._proc = running
+    if provider == "claude":
+        warm = b.backend._warm = subprocess.Popen([exe], stdin=subprocess.PIPE)
+        b.backend._warm_config = b.backend._config()
+    b.shutdown()
+    assert running.returncode is not None                      # reaped, not just signalled
+    if provider == "claude":
+        assert warm.returncode is not None and b.backend._warm is None
+
+
+def test_stop_warm_leaves_the_running_answer_alone(kb_copy, tmp_path, monkeypatch):
+    exe = fake_cli(tmp_path, "sys.stdin.read(); time.sleep(60)")
+    b = brain_for(kb_copy, monkeypatch, "claude", exe)
+    running = b.backend._proc = subprocess.Popen([exe], stdin=subprocess.PIPE)
+    warm = b.backend._warm = subprocess.Popen([exe], stdin=subprocess.PIPE)
+    try:
+        b.stop_warm()
+        assert warm.returncode is not None and running.poll() is None
+    finally:
+        running.kill()
+        running.wait()

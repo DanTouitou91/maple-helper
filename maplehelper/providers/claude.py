@@ -20,7 +20,7 @@ from pathlib import Path
 
 from .. import usage
 from .base import CREATE_NEW_CONSOLE, CREATE_NO_WINDOW, RUN_TIMEOUT, Deadline, Provider, RawResult, classify_error, \
-    child_env, find_posix, find_windows_exe, http_ok, in_terminal, run_installer
+    child_env, find_posix, find_windows_exe, http_ok, in_terminal, reap, run_installer
 
 log = logging.getLogger(__name__)
 
@@ -185,10 +185,18 @@ class ClaudeBackend:
             self._warm.kill()
         self._warm = None
 
-    def shutdown(self) -> None:
+    def stop_warm(self) -> None:
+        """Stop the waiting process only (a running answer goes on), and wait until it has exited."""
         with self._warm_lock:
+            warm = self._warm
             self._discard_warm()
+        reap(warm)
+
+    def shutdown(self) -> None:
+        self.stop_warm()
+        proc = self._proc
         self.cancel()
+        reap(proc)
 
     def cancel(self) -> None:
         if self._proc and self._proc.poll() is None:
