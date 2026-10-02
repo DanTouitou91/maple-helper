@@ -86,6 +86,12 @@ class FocusLineEdit(QLineEdit):
         super().focusOutEvent(e)
         self.focus_changed.emit(False)
 
+    def keyPressEvent(self, e):
+        if e.key() == Qt.Key_Up and not self.text():
+            e.ignore()          # macOS's line edit takes ↑ (to the line start): let the chat recall the last question
+            return
+        super().keyPressEvent(e)
+
 
 def _visible(text: str) -> str:
     """A streaming answer can end in the first characters of the hidden @@META@@ marker: don't flash them."""
