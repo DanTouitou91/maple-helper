@@ -20,6 +20,21 @@ import pytest  # noqa: E402
 FIXTURE_KB = Path(__file__).parent / "fixtures" / "kb"
 
 
+@pytest.fixture(autouse=True)
+def no_network(monkeypatch):
+    """No test reaches the internet. An app left alive by one test fires its 4-second update check during a
+    later test; a real 21 MB download unpacking in a daemon thread while pytest tears widgets down crashed
+    Python on Windows (heap corruption). Tests that model a server patch these again themselves."""
+    import urllib.error
+    import urllib.request
+
+    def refuse(*a, **k):
+        raise urllib.error.URLError("no network in tests")
+    monkeypatch.setattr(urllib.request, "urlopen", refuse)
+    from maplehelper import updater
+    monkeypatch.setattr(updater, "_get", lambda url, timeout=30: None)
+
+
 @pytest.fixture
 def kb_copy(tmp_path) -> Path:
     """A writable copy of the fixture knowledge base."""
