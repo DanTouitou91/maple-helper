@@ -45,8 +45,15 @@ def find_claude() -> str | None:
     return shutil.which("claude")
 
 
+# Claude Code's own phoning home, off: usage metrics, error reports, the auto-updater and other nonessential
+# fetches. The first covers them all on current versions; the other three are what older ones read.
+# Names: https://code.claude.com/docs/en/env-vars (set at all = on, so the value is just "1").
+QUIET = {"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1", "DISABLE_TELEMETRY": "1",
+         "DISABLE_ERROR_REPORTING": "1", "DISABLE_AUTOUPDATER": "1"}
+
+
 def env() -> dict:
-    return child_env(POSIX_DIRS)
+    return {**child_env(POSIX_DIRS), **QUIET}
 
 
 def tool_status(block: dict) -> str | None:

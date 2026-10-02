@@ -9,7 +9,7 @@ from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (QButtonGroup, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
                                QScrollArea, QStackedWidget, QVBoxLayout, QWidget)
 
-from .. import bidi, providers
+from .. import bidi, feedback, providers
 from .controls import Section, Segmented, Select, Stepper, Switch, rtl_buttons
 from .glass import GlassDialog
 from ..i18n import I18n
@@ -659,6 +659,8 @@ class SettingsDialog(GlassDialog):
         sec.add_row(t("answer_length"), self.length)
         self.instant = Switch(settings["instant_answers"])
         sec.add_row(t("instant_answers"), self.instant, hint=t.p("instant_answers_hint", settings["provider"]))
+        self.summaries = Switch(settings["session_summaries"])
+        sec.add_row(t("session_summaries"), self.summaries, hint=t("session_summaries_hint"))
         lay.addWidget(sec)
 
         # AI account: the provider and its sign-in act right away (like sign-out), not on Save
@@ -1028,6 +1030,7 @@ class SettingsDialog(GlassDialog):
                             t.rtl, self.stylesheet_fn(1.0))
         if dlg.exec():
             History(c.id).clear()
+            feedback.clear()
             self.history_cleared.emit()
 
     def _save(self):
@@ -1040,6 +1043,7 @@ class SettingsDialog(GlassDialog):
             "hotkey_voice": self.hk_voice.currentText(),
             "voice_send_immediately": self.voice_send.isChecked(),
             "instant_answers": self.instant.isChecked(),
+            "session_summaries": self.summaries.isChecked(),
             "saver_mode": self.saver.isChecked(),
             "answer_length": self.length.value(),
             "start_with_windows": self.autostart.isChecked(),

@@ -3,6 +3,7 @@ shortcuts, opacity and click-through."""
 import json
 import sys
 import threading
+import types
 
 import pytest
 from test_ui_overlay import wait  # also stands in for the OS layer (no game) off Windows
@@ -449,3 +450,16 @@ def test_opacity_and_click_through(qapp, chat):
     assert not chat.settings["click_through"]
     assert not chat.windowFlags() & Qt.WindowTransparentForInput
     assert chat.isVisible()
+
+
+def test_clear_history_drops_the_ratings_too(data_dir, monkeypatch):
+    from maplehelper.ui import dialogs
+    feedback.add("q", "a", "down", [], "m", "en")
+    feedback.add("q2", "a2", "up", [], "m", "en")                    # the second write leaves a .bak
+    assert feedback.path().with_name("feedback.json.bak").exists()
+    monkeypatch.setattr(dialogs, "ConfirmDialog", lambda *a, **k: types.SimpleNamespace(exec=lambda: True))
+    fake = types.SimpleNamespace(profiles=types.SimpleNamespace(active=types.SimpleNamespace(id="c1", name="Dan")),
+                                 t=dialogs.I18n("en"), stylesheet_fn=lambda *_: "",
+                                 history_cleared=types.SimpleNamespace(emit=lambda: None))
+    dialogs.SettingsDialog._clear_history(fake)
+    assert feedback.load() == [] and not feedback.path().with_name("feedback.json.bak").exists()

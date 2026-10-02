@@ -10,15 +10,18 @@ from . import theme
 from .controls import Section
 from .glass import GlassDialog
 
-# (section header, [(row, hint or None)]): each line matches what the code does (brain.py, updater.py,
-# market.py, voice.py, providers/base.py, report.py)
+# (section header, [(row, hint or None)]): each line matches what the code does (brain.py, app.py's
+# summarize_session, providers/claude.py + codex.py QUIET, updater.py, ui/wishlist.py + market.py, voice.py,
+# feedback.py, costs.py, report.py)
 SECTIONS = [
     ("privacy_sec_ai", [("privacy_ai_question", None), ("privacy_ai_shot", None), ("privacy_ai_profile", None),
-                        ("privacy_ai_chat", None), ("privacy_ai_where", "privacy_ai_where_hint")]),
+                        ("privacy_ai_chat", None), ("privacy_ai_summary", "privacy_ai_summary_hint"),
+                        ("privacy_ai_where", "privacy_ai_where_hint"), ("privacy_ai_cli", "privacy_ai_cli_hint")]),
     ("privacy_sec_net", [("GitHub", "privacy_net_github"), ("meowdb.com", "privacy_net_meowdb"),
                          ("Hugging Face", "privacy_net_hf")]),
-    ("privacy_sec_local", [("privacy_local_chats", None), ("privacy_local_voice", None),
-                           ("privacy_local_keys", None), ("privacy_local_report", None)]),
+    ("privacy_sec_local", [("privacy_local_chats", None), ("privacy_local_ratings", None),
+                           ("privacy_local_voice", None), ("privacy_local_keys", None),
+                           ("privacy_local_report", None)]),
 ]
 
 

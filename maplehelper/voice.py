@@ -6,6 +6,7 @@ GPU (CUDA) when available, otherwise CPU int8 (always on macOS).
 """
 from __future__ import annotations
 
+import os
 import threading
 
 import numpy as np
@@ -16,6 +17,21 @@ from .store import DATA_DIR
 MODEL_ID = "ivrit-ai/whisper-large-v3-turbo-ct2"
 SAMPLE_RATE = 16_000
 MIN_SECONDS = 0.4
+# huggingface_hub reads these once, at import (huggingface_hub/constants.py): no usage ping, and a token
+# some other tool left in ~/.cache/huggingface is never sent along
+HUB_QUIET = {"HF_HUB_DISABLE_TELEMETRY": "1", "HF_HUB_DISABLE_IMPLICIT_TOKEN": "1"}
+
+
+def quiet_runtimes() -> None:
+    """Before faster_whisper is imported: Hugging Face's hub stays quiet, and ONNX Runtime (the VAD)
+    sends Microsoft no trace events."""
+    for k, v in HUB_QUIET.items():
+        os.environ.setdefault(k, v)
+    try:
+        import onnxruntime
+        onnxruntime.disable_telemetry_events()
+    except (ImportError, AttributeError):
+        pass
 
 
 class Transcriber:
@@ -30,14 +46,24 @@ class Transcriber:
         with self._lock:
             if self._model is not None:
                 return
-            from faster_whisper import WhisperModel
+            quiet_runtimes()
             root = str(DATA_DIR / "models")
             try:
-                self._model = WhisperModel(MODEL_ID, device="cuda", compute_type="float16", download_root=root)
-                # a tiny decode proves the GPU runtime actually works
-                self._model.transcribe(np.zeros(SAMPLE_RATE // 2, dtype=np.float32))
+                self._model = self._open(root, local=True)      # already on disk: Hugging Face is not contacted
             except Exception:
-                self._model = WhisperModel(MODEL_ID, device="cpu", compute_type="int8", download_root=root)
+                self._model = self._open(root, local=False)     # first use: the download (~1.6GB)
+
+    @staticmethod
+    def _open(root: str, local: bool):
+        from faster_whisper import WhisperModel
+        kw = dict(download_root=root, local_files_only=local)
+        try:
+            model = WhisperModel(MODEL_ID, device="cuda", compute_type="float16", **kw)
+            # a tiny decode proves the GPU runtime actually works
+            model.transcribe(np.zeros(SAMPLE_RATE // 2, dtype=np.float32))
+            return model
+        except Exception:
+            return WhisperModel(MODEL_ID, device="cpu", compute_type="int8", **kw)
 
     def transcribe(self, audio: np.ndarray) -> str:
         self.load()

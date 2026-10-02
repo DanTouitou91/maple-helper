@@ -27,6 +27,21 @@ POSIX_DIRS = ["~/.local/bin", "~/.codex/bin", "/opt/homebrew/bin", "/usr/local/b
 TOOLS_NOTE = ("\nTools: you read the knowledge base with read-only shell commands in the current directory "
               "(rg, grep, Select-String, Get-Content, cat). You cannot write files or use the network.")
 
+# Codex's own phoning home, off: OpenTelemetry metrics (Statsig unless told otherwise), traces and logs, and
+# product analytics. Keys: codex-rs/config/src/types.rs (OtelConfigToml, AnalyticsConfigToml); "-c" is a
+# global flag of every subcommand, app-server included (codex-rs/utils/cli/src/config_override.rs).
+QUIET = ("-c", 'otel.metrics_exporter="none"', "-c", 'otel.trace_exporter="none"', "-c", 'otel.exporter="none"',
+         "-c", "analytics.enabled=false")
+
+
+def sweep_shots() -> None:
+    """Screenshots a hard kill left in the temp folder (a normal run deletes its own)."""
+    for p in Path(tempfile.gettempdir()).glob("maplehelper-shot-*.jpg"):
+        try:
+            p.unlink()
+        except OSError:
+            pass
+
 
 def store_apps() -> list[Path]:
     """codex.exe inside OpenAI's desktop app from the Microsoft Store (the "ChatGPT"/Codex app), newest first.
@@ -96,7 +111,7 @@ def codex_command(exe: str, workdir, instructions: str, model: str | None = None
         cmd += ["--image", str(image)]
     # json.dumps gives a valid TOML basic string (same escapes), so newlines and quotes survive -c
     cmd += ["--json", "--ephemeral", "--ignore-user-config", "--ignore-rules", "--skip-git-repo-check",
-            "-s", "read-only", "-C", str(workdir), "-c", "developer_instructions=" + json.dumps(instructions)]
+            "-s", "read-only", "-C", str(workdir), *QUIET, "-c", "developer_instructions=" + json.dumps(instructions)]
     if platform == "win32":
         # without it, the read-only sandbox on Windows blocks even reading files
         cmd += ["-c", 'windows.sandbox="unelevated"']
@@ -157,7 +172,7 @@ def app_server(method: str, params: dict | None = None, timeout: float = 20) -> 
     if not exe:
         return None
     try:
-        p = subprocess.Popen([exe, "app-server"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+        p = subprocess.Popen([exe, "app-server", *QUIET], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                              stderr=subprocess.DEVNULL, env=env(), creationflags=CREATE_NO_WINDOW)
     except OSError:
         return None
@@ -269,6 +284,7 @@ class CodexBackend:
         self.brain = brain
         self.exe = find_codex()
         self._proc: subprocess.Popen | None = None
+        sweep_shots()
 
     def prewarm(self) -> None:
         # the screenshot must be on the command line, so a process can't be started before the question

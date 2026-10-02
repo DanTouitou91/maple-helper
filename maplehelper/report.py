@@ -19,16 +19,28 @@ from .store import DATA_DIR
 
 LOG_DIR = DATA_DIR / "logs"
 LOG_FILE = LOG_DIR / "maplehelper.log"
-PRIVATE_SETTINGS = ("window", "bubble_pos", "pins", "last_session", "wishlist", "microphone",
+PRIVATE_SETTINGS = ("window", "bubble_pos", "pins", "last_session", "wishlist", "wish_prices", "microphone",
                     "tips_dismissed", "usage_warned")
+HOME = str(Path.home())
 log = logging.getLogger("maplehelper")
+
+
+def scrub(text: str) -> str:
+    """The home folder (it carries the user name) as "~" in anything the report may hold: tracebacks,
+    a CLI's stderr, paths in log lines (either slash on Windows)."""
+    return text.replace(HOME, "~").replace(HOME.replace("\\", "/"), "~")
+
+
+class _Formatter(logging.Formatter):
+    def format(self, record) -> str:
+        return scrub(super().format(record))
 
 
 def setup_logging() -> None:
     """Log to %APPDATA%/MapleHelper/logs (3 x 1 MB), including crashes on any thread."""
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     handler = logging.handlers.RotatingFileHandler(LOG_FILE, maxBytes=1_000_000, backupCount=2, encoding="utf-8")
-    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+    handler.setFormatter(_Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
     root = logging.getLogger()
     if not any(isinstance(h, logging.handlers.RotatingFileHandler) for h in root.handlers):
         root.addHandler(handler)
@@ -53,10 +65,11 @@ def build_report(out_dir: Path, info: dict, settings: dict) -> Path:
     """Zip the logs + info + settings (minus private bits) into out_dir; returns the zip path."""
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / f"MapleHelper-report-{time.strftime('%Y%m%d-%H%M%S')}.zip"
-    clean = {k: v for k, v in settings.items() if k not in PRIVATE_SETTINGS}
+    clean = {k: v for k, v in settings.items() if k not in PRIVATE_SETTINGS and not k.startswith("wish")}
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr("info.json", json.dumps(info, ensure_ascii=False, indent=1))
         z.writestr("settings.json", json.dumps(clean, ensure_ascii=False, indent=1))
         for f in sorted(LOG_DIR.glob("maplehelper.log*")):
-            z.write(f, f"logs/{f.name}")
+            # scrubbed again on the way in: lines older than the scrubbing logger, or from another process
+            z.writestr(f"logs/{f.name}", scrub(f.read_text(encoding="utf-8", errors="replace")))
     return path

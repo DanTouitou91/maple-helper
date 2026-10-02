@@ -69,6 +69,63 @@ class TestCodexCommand:
         assert c[2:4] == ["--image", "C:/tmp/shot.jpg"]
         assert c[-1] == "-"
 
+    def test_codex_phones_home_for_nothing(self):
+        # otel exporters off (metrics default to Statsig) and product analytics off, as -c overrides
+        c = self.cmd()
+        overrides = [c[i + 1] for i, v in enumerate(c) if v == "-c"]
+        for key, value in (("otel.metrics_exporter", "none"), ("otel.trace_exporter", "none"),
+                           ("otel.exporter", "none"), ("analytics.enabled", False)):
+            assert any(tomllib.loads(o) == _nested(key, value) for o in overrides), key
+
+
+def _nested(dotted: str, value) -> dict:
+    out = value
+    for part in reversed(dotted.split(".")):
+        out = {part: out}
+    return out
+
+
+def test_app_server_gets_the_same_quiet_overrides(monkeypatch):
+    seen = {}
+
+    class Proc:
+        def __init__(self, cmd, **kw):
+            seen["cmd"] = cmd
+            self.stdin = io.BytesIO()
+            self.stdout = io.BytesIO(b'{"id": 2, "result": {"ok": true}}\n')
+
+        def kill(self):
+            pass
+
+        def wait(self):
+            pass
+    monkeypatch.setattr(codex, "find_codex", lambda: "codex")
+    monkeypatch.setattr(codex.subprocess, "Popen", Proc)
+    assert codex.app_server("account/read") == {"ok": True}
+    assert seen["cmd"][:2] == ["codex", "app-server"] and seen["cmd"][2:] == list(codex.QUIET)
+
+
+def test_claude_phones_home_for_nothing(kb, monkeypatch):
+    # telemetry, error reports and the auto-updater off, for auth commands and answers alike
+    monkeypatch.delenv("DISABLE_TELEMETRY", raising=False)
+    for k in claude.QUIET:
+        assert claude.env()[k] == "1"
+    from maplehelper.brain import Brain
+    e = Brain(kb, provider="claude", api_key="sk-ant-1").backend._env()
+    assert all(e[k] == "1" for k in claude.QUIET) and e["ANTHROPIC_API_KEY"] == "sk-ant-1"
+    assert claude.QUIET.keys() == {"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "DISABLE_TELEMETRY",
+                                   "DISABLE_ERROR_REPORTING", "DISABLE_AUTOUPDATER"}
+
+
+def test_stale_screenshots_are_swept_when_codex_starts(kb, tmp_path, monkeypatch):
+    monkeypatch.setattr(codex.tempfile, "gettempdir", lambda: str(tmp_path))
+    stale, other = tmp_path / "maplehelper-shot-abc.jpg", tmp_path / "keep.jpg"
+    stale.write_bytes(b"x")
+    other.write_bytes(b"x")
+    from maplehelper.brain import Brain
+    Brain(kb, provider="codex")
+    assert not stale.exists() and other.exists()
+
 
 def events(*objs, noise=True) -> list[str]:
     lines = [json.dumps(o) + "\n" for o in objs]

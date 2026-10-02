@@ -10,7 +10,7 @@ from PySide6.QtCore import QLockFile, QObject, Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QIcon, QKeySequence
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
-from . import APP_NAME, __version__, osapi, providers, report, updater, whatsnew, wishlist
+from . import APP_NAME, __version__, feedback, osapi, providers, report, updater, whatsnew, wishlist
 from .brain import Brain
 from .i18n import I18n
 from .kb import KnowledgeBase
@@ -261,7 +261,7 @@ class MapleHelperApp:
             return
         transcript = self.overlay.end_session()
         c = self.profiles.active
-        if not transcript or not c:
+        if not transcript or not c or not self.settings["session_summaries"]:
             return
 
         def work():
@@ -354,6 +354,7 @@ class MapleHelperApp:
                              t("cancel"), t.rtl, self.style()).exec():
             return
         self.profiles.remove(cid)
+        feedback.clear()
         if not self.profiles.characters:
             # advice needs a character: offer to create one right away
             Onboarding(self.settings, self.profiles, self.kb, self.style, only_character=True).exec()

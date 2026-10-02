@@ -28,3 +28,11 @@ def add(question: str, answer: str, rating: str, entities: list[str] | None = No
     with _lock:
         store._write_json(path(), (load() + [rec])[-KEEP:])
     return rec
+
+
+def clear() -> None:
+    """Ratings quote questions and answers: they go with "Clear history" and with a removed character
+    (they aren't kept per character, so all of them)."""
+    with _lock:
+        for p in (path(), path().with_name(path().name + ".bak")):
+            p.unlink(missing_ok=True)

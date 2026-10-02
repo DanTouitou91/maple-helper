@@ -1,5 +1,20 @@
 [
  {
+  "version": "0.8.1",
+  "he": [
+   "פרטיות: הדיווחים הטכניים של Claude Code ושל Codex ליצרניות שלהם כבויים בכל הפעלה מתוך האפליקציה.",
+   "זיהוי הקול לא פונה יותר ל-Hugging Face אחרי שהמודל ירד, ולא שולח טלמטריה.",
+   "סיכום השיחה האוטומטי (נשלח ל-AI כחצי שעה אחרי סגירת הצ'אט) הוא עכשיו מתג בהגדרות, עם הסבר.",
+   "דף הפרטיות מתאר במדויק מה נשלח לאן. דוח התקלות ויומן השגיאות בלי שם המשתמש, ו\"מחיקת היסטוריה\" מוחקת גם את הדירוגים."
+  ],
+  "en": [
+   "Privacy: Claude Code's and Codex's own technical reporting to their makers is off in every run the app starts.",
+   "Voice recognition no longer contacts Hugging Face once the model is on disk, and sends no telemetry.",
+   "The automatic session summary (sent to the AI about half an hour after the chat closes) is now a switch in Settings, with an explanation.",
+   "The privacy page says exactly what goes where. Problem reports and the log leave out your user name, and 'Clear history' removes the ratings too."
+  ]
+ },
+ {
   "version": "0.8.0",
   "he": [
    "שאלות מוצעות בצ'אט ריק, וכפתורי המשך אחרי כל תשובה (\"איפה זה?\", \"מה הוא מפיל?\").",

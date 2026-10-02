@@ -382,6 +382,11 @@ STRINGS = {
     "quick_badge": {"he": "⚡ תשובה מהירה מהמאגר", "en": "⚡ Instant answer from the database"},
     "quick_ask_ai": {"he": "לשאול את Claude בכל זאת", "en": "Ask Claude anyway"},
     "quick_ask_ai_codex": {"he": "לשאול את ChatGPT בכל זאת", "en": "Ask ChatGPT anyway"},
+    "session_summaries": {"he": "זיכרון בין משחקים", "en": "Memory between sessions"},
+    "session_summaries_hint": {"he": "כחצי שעה אחרי שהצ'אט נסגר, כל השיחה של אותו משחק נשלחת ל-AI כדי לכתוב סיכום קצר "
+                                     "שישמש כזיכרון בפעם הבאה",
+                               "en": "About 30 minutes after the chat closes, that session's whole chat is sent to your AI "
+                                     "to write a short memory summary for next time"},
     "instant_answers": {"he": "תשובות מהירות מהמאגר", "en": "Instant answers from the database"},
     "instant_answers_hint": {"he": "שאלות פשוטות (HP, דרופים, מיקום) נענות מיד מהמאגר, בלי לחכות ל-AI",
                              "en": "Simple questions (HP, drops, location) are answered at once from the database, "
@@ -641,21 +646,36 @@ STRINGS = {
     "privacy_ai_shot": {"he": "צילום של חלון המשחק", "en": "A screenshot of the game window"},
     "privacy_ai_profile": {"he": "פרופיל הדמות (שם, קלאס, לבל, הערות)",
                            "en": "Your character profile (name, class, level, notes)"},
-    "privacy_ai_chat": {"he": "השיחה שלכם עם העוזר וסיכומים קצרים של משחקים קודמים",
-                        "en": "Your chat with the helper and short summaries of past sessions"},
+    "privacy_ai_chat": {"he": "השיחה האחרונה עם העוזר וסיכומים של משחקים קודמים",
+                        "en": "Your recent chat with the helper and summaries of earlier sessions"},
+    "privacy_ai_summary": {"he": "כחצי שעה אחרי שהצ'אט נסגר: כל השיחה של אותו משחק, כדי לכתוב סיכום קצר לזיכרון",
+                           "en": "About 30 minutes after the chat closes: that session's whole chat, "
+                                 "to write a short memory summary"},
+    "privacy_ai_summary_hint": {"he": "אפשר לכבות בהגדרות: \"זיכרון בין משחקים\"",
+                                "en": "Turn it off in Settings: \"Memory between sessions\""},
     "privacy_ai_where": {"he": "רק ל-AI שבחרתם: Anthropic (Claude) או OpenAI (ChatGPT)",
                          "en": "Only to the AI you picked: Anthropic (Claude) or OpenAI (ChatGPT)"},
     "privacy_ai_where_hint": {"he": "דרך החשבון או מפתח ה-API שלכם. בלי AI מחובר לא נשלח כלום.",
                               "en": "Through your own account or API key. With no AI connected, nothing is sent."},
+    "privacy_ai_cli": {"he": "התוכנות Claude Code / Codex עצמן פונות גם ליצרניות שלהן: כניסה לחשבון, עדכונים ודיווחים טכניים",
+                       "en": "The Claude Code / Codex programs themselves also contact their makers: "
+                             "sign-in, updates and technical reports"},
+    "privacy_ai_cli_hint": {"he": "האפליקציה מכבה את זה היכן שהן מאפשרות (סטטיסטיקות שימוש, דיווחי שגיאות, עדכון אוטומטי)",
+                            "en": "The app turns these off where they allow it (usage stats, error reports, auto-update)"},
     "privacy_sec_net": {"he": "חיבורים אחרים", "en": "Other connections"},
-    "privacy_net_github": {"he": "בדיקת עדכונים לאפליקציה ולמאגר המשחק (כל כמה שעות)",
-                           "en": "Checks for app and game-database updates (every few hours)"},
-    "privacy_net_meowdb": {"he": "רק כשבודקים מחירים ב-Free Market: שם הפריט",
-                           "en": "Only when you check Free Market prices: the item's name"},
-    "privacy_net_hf": {"he": "רק אם משתמשים בקול: הורדת מודל הדיבור (פעם אחת) ובדיקה שהוא עדכני",
-                       "en": "Only if you use voice: downloads the speech model once, then checks it's current"},
+    "privacy_net_github": {"he": "בדיקת גרסה אוטומטית בהפעלה וכל 3 שעות (רואים את כתובת ה-IP שלכם, בלי חשבון)",
+                           "en": "Automatic version checks at startup and every 3 hours (your IP address, no account)"},
+    "privacy_net_meowdb": {"he": "שמות פריטים כשבודקים מחירים ב-Free Market, כולל אוטומטית כשרשימת המשאלות נפתחת "
+                                 "(כל פריט פעם אחת בכל הפעלה)",
+                           "en": "Item names when you check Free Market prices, including automatically when the "
+                                 "wishlist opens (each item once per app run)"},
+    "privacy_net_hf": {"he": "רק אם משתמשים בקול: הורדת מודל הדיבור, פעם אחת. משהוא על הדיסק, אין עוד פנייה",
+                       "en": "Only if you use voice: the speech model download, once. Once it's on disk, "
+                             "no further contact"},
     "privacy_sec_local": {"he": "נשאר על המחשב שלכם", "en": "Stays on your computer"},
     "privacy_local_chats": {"he": "שיחות, דמויות והגדרות", "en": "Chats, characters and settings"},
+    "privacy_local_ratings": {"he": "הדירוגים 👍/👎 שלכם לתשובות (feedback.json) וסיכום העלויות (costs.json)",
+                              "en": "Your 👍/👎 ratings of answers (feedback.json) and the cost tally (costs.json)"},
     "privacy_local_voice": {"he": "הקול שלכם: מומר לטקסט על המחשב, וההקלטה לא נשמרת",
                             "en": "Your voice: turned into text on your computer; recordings aren't kept"},
     "privacy_local_keys": {"he": "מפתחות API: ב-Windows Credential Manager או ב-Keychain של macOS",
@@ -684,10 +704,14 @@ STRINGS = {
     "a11y_book": {"he": "מדריכים", "en": "Guides"},
     "a11y_search": {"he": "חיפוש", "en": "Search"},
     "a11y_tools": {"he": "כלים", "en": "Tools"},
-    "ob_privacy": {"he": "פרטיות: הכל נשמר על המחשב שלכם. רק השאלה והצילום של חלון המשחק נשלחים ל-Claude, ורק כשאתם שואלים.",
-                   "en": "Privacy: everything stays on your PC. Only your question and the game-window screenshot go to Claude, and only when you ask."},
-    "ob_privacy_codex": {"he": "פרטיות: הכל נשמר על המחשב שלכם. רק השאלה והצילום של חלון המשחק נשלחים ל-OpenAI (ChatGPT), ורק כשאתם שואלים.",
-                         "en": "Privacy: everything stays on your PC. Only your question and the game-window screenshot go to OpenAI (ChatGPT), and only when you ask."},
+    "ob_privacy": {"he": "פרטיות: הכל נשמר על המחשב שלכם. ל-Claude נשלחים, רק כשאתם שואלים: השאלה, צילום חלון המשחק, "
+                         "פרופיל הדמות והשיחה האחרונה. הפרטים בהגדרות ← פרטיות.",
+                   "en": "Privacy: everything stays on your PC. Only when you ask, Claude gets your question, the game-window "
+                         "screenshot, your character profile and the recent chat. Details under Settings → Privacy."},
+    "ob_privacy_codex": {"he": "פרטיות: הכל נשמר על המחשב שלכם. ל-OpenAI (ChatGPT) נשלחים, רק כשאתם שואלים: השאלה, צילום חלון "
+                               "המשחק, פרופיל הדמות והשיחה האחרונה. הפרטים בהגדרות ← פרטיות.",
+                         "en": "Privacy: everything stays on your PC. Only when you ask, OpenAI (ChatGPT) gets your question, the "
+                               "game-window screenshot, your character profile and the recent chat. Details under Settings → Privacy."},
     "ob_borderless": {"he": "טיפ: הריצו את המשחק במצב Borderless / Windowed Fullscreen כדי שהצ'אט יופיע מעליו.",
                       "en": "Tip: run the game in Borderless / Windowed Fullscreen so the chat can appear on top."},
     "ob_done_hint": {"he": "לחצו F9 בתוך המשחק כדי לפתוח ולסגור את הצ'אט.",

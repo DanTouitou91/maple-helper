@@ -186,3 +186,16 @@ def test_privacy_page_opens_from_settings_and_the_first_onboarding_page(qapp, is
     ob = Onboarding(s, isolated_store.Profiles(), kb, lambda *_: "")
     next(b for b in ob.lang_page.findChildren(QPushButton) if b.text() == "Privacy").click()
     assert opened == ["en", "en"]
+
+
+@pytest.mark.parametrize("lang", ["he", "en"])
+def test_privacy_page_tells_the_whole_story(lang):
+    """The page names every outbound flow and local file the code has (see the SECTIONS comment)."""
+    from maplehelper.i18n import I18n
+    from maplehelper.ui.privacy import SECTIONS
+    t = I18n(lang)
+    text = " ".join(t(k) for _, rows in SECTIONS for r in rows for k in r if k)
+    for needle in ("30" if lang == "en" else "חצי שעה", "Claude Code / Codex", "3", "feedback.json", "costs.json"):
+        assert needle in text
+    assert t("session_summaries") in t("privacy_ai_summary_hint")     # the switch the hint points at exists
+    assert t.p("ob_privacy", "claude").count("Claude") == 1 and "OpenAI" in t.p("ob_privacy", "codex")

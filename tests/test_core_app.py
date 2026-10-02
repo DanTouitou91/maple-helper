@@ -110,3 +110,32 @@ def test_problem_report_reads_the_sign_in_status_off_the_gui_thread(app_cls, mon
     a.settings = Settings(language="en", provider="claude", no_ai=False)
     app_cls.make_report(a)
     assert a.done.wait(5) and seen["thread"] is not gui and seen["ai"] == "Claude: ok"
+
+
+def test_session_summaries_off_keep_the_chat_off_the_ai(app_cls, monkeypatch):
+    import maplehelper.app as app_mod
+    sent, kept, done = [], [], threading.Event()
+
+    class History:
+        def __init__(self, cid):
+            pass
+
+        def add_summary(self, s):
+            kept.append(s)
+            done.set()
+    monkeypatch.setattr(app_mod, "History", History)
+    a = fake_app(app_cls, profiles=types.SimpleNamespace(active=types.SimpleNamespace(id="c1")),
+                 brain=types.SimpleNamespace(summarize=lambda text: sent.append(text) or "memo"))
+    ended = []
+    a.overlay = types.SimpleNamespace(isVisible=lambda: False,
+                                      end_session=lambda: (ended.append(1), "user: hi\nassistant: hey")[1])
+    a.settings = {"language": "en", "session_summaries": False}
+    app_cls.summarize_session(a)
+    assert ended == [1] and not sent            # the session still ends locally; nothing goes to the AI
+    a.settings["session_summaries"] = True
+    app_cls.summarize_session(a)
+    assert done.wait(5) and sent == ["user: hi\nassistant: hey"] and kept == ["memo"]
+
+
+def test_session_summaries_default_on(isolated_store):
+    assert isolated_store.Settings()["session_summaries"] is True
