@@ -89,6 +89,8 @@ DEFAULT_SETTINGS = {
     "hotkey_voice": "F10",
     "appearance": "light",         # dark | light (opaque surfaces)
     "font_size": 14,
+    "chat_opacity": 100,          # % (60-100): how solid the chat window is over the game
+    "click_through": False,       # the chat ignores the mouse (clicks reach the game); opening it turns this off
     "answer_length": "short",     # short | detailed
     "window": None,
     "bubble_pos": None,           # where the minimized bubble sits               # {"x","y","w","h","screen"} saved on move/resize

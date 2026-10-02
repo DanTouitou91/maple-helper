@@ -307,7 +307,7 @@ class CodexBackend:
             return RawResult(error="timeout")
         return parse_events(lines, b"".join(err).decode("utf-8", errors="replace"))
 
-    def run(self, prompt: str, screenshot_jpeg: bytes | None, on_raw_delta=None) -> RawResult:
+    def run(self, prompt: str, screenshot_jpeg: bytes | None, on_raw_delta=None, on_status=None) -> RawResult:
         b = self.brain
         image = None
         try:

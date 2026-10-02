@@ -11,6 +11,7 @@ import base64
 import json
 import logging
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -46,6 +47,18 @@ def find_claude() -> str | None:
 
 def env() -> dict:
     return child_env(POSIX_DIRS)
+
+
+def tool_status(block: dict) -> str | None:
+    """What a tool call is doing, for the chat's "thinking" line: "search", "read:<kb key>" or "read".
+    Never the raw arguments (a path or a pattern means nothing to a player)."""
+    name = block.get("name")
+    if name in ("Grep", "Glob"):
+        return "search"
+    if name == "Read":
+        m = re.search(r"pages[/\\](\w+)[/\\]([\w-]+)\.md$", str((block.get("input") or {}).get("file_path", "")))
+        return f"read:{m.group(1)}/{m.group(2)}" if m else "read"
+    return None
 
 
 class Claude(Provider):
@@ -181,7 +194,7 @@ class ClaudeBackend:
         if self._proc and self._proc.poll() is None:
             self._proc.kill()
 
-    def run(self, prompt: str, screenshot_jpeg: bytes | None, on_raw_delta=None) -> RawResult:
+    def run(self, prompt: str, screenshot_jpeg: bytes | None, on_raw_delta=None, on_status=None) -> RawResult:
         content = []
         if screenshot_jpeg:
             content.append({"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
@@ -237,6 +250,11 @@ class ClaudeBackend:
                     current += se["delta"]["text"]
                     if on_raw_delta:
                         on_raw_delta(current)
+            elif t == "assistant" and on_status:
+                for block in (ev.get("message") or {}).get("content") or []:
+                    status = tool_status(block) if block.get("type") == "tool_use" else None
+                    if status:
+                        on_status(status)
             elif t == "result":
                 result = ev
             elif t == "system" and ev.get("subtype") == "init":

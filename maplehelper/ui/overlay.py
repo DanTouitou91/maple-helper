@@ -20,11 +20,13 @@ from .glass import paint_glass
 from .minibubble import MiniBubble
 from .widgets import (SELECTION, WISHLIST, Bubble, BubbleRow, DropGroupCard, EntityCard, NoticeCard, ProfileCard,
                       SessionCard, SystemLine, TileGrid, character_image)
+from .chatbits import Chips, Rating, footer
 
 
 
 class AskWorker(QObject):
     delta = Signal(str)
+    status = Signal(str)          # what the AI looks up before it writes ("search", "read:<kb key>")
     done = Signal(object)
 
     def __init__(self, brain: Brain, question: str, character, history, shot: bytes | None, focus=None):
@@ -36,7 +38,7 @@ class AskWorker(QObject):
         # whatever happens, the chat gets an answer back (never stuck on "thinking")
         try:
             ans = self.brain.ask(self.question, self.character, self.history, self.shot, on_delta=self.delta.emit,
-                                 focus=self.focus)
+                                 focus=self.focus, on_status=self.status.emit)
         except Exception as e:  # noqa: BLE001
             ans = Answer(error=f"internal: {e}")
         self.done.emit(ans)
@@ -93,6 +95,27 @@ def _visible(text: str) -> str:
     return text
 
 
+# an answer's error code -> (its text, the one-tap fix: (button text, what it does) or None).
+# The text says what to do; the button does it.
+ERRORS = {
+    "offline": ("err_offline", ("retry", "retry")),
+    "timeout": ("err_timeout", ("retry", "retry")),
+    "no_result": ("err_no_result", ("retry", "retry")),
+    "api_error": ("err_api_error", ("retry", "retry")),
+    "not_logged_in": ("err_not_logged_in", ("sign_in", "settings")),
+    "not_installed": ("err_not_installed", ("fix_install", "settings")),
+    "launch_failed": ("err_launch_failed", ("fix_settings", "settings")),
+    "no_ai": ("err_no_ai", ("fix_connect_ai", "settings")),
+    "usage_limit": ("err_usage_limit", ("saver_turn_on", "saver")),
+}
+
+
+def error_view(code: str, saver_on: bool = False) -> tuple[str, tuple | None]:
+    """The text key and the fix for an error code ("launch_failed: <detail>" counts as launch_failed)."""
+    text, fix = ERRORS.get((code or "").split(":")[0], ("err_generic", ("retry", "retry")))
+    return text, None if fix[1] == "saver" and saver_on else fix
+
+
 def _alive(w) -> bool:
     """False once Qt deleted the widget (e.g. the chat was cleared)."""
     try:
@@ -120,6 +143,8 @@ class Overlay(QWidget):
     tools_requested = Signal()
     edit_character_requested = Signal(str)
     delete_character_requested = Signal(str)      # plan usage read in the background after an answer (ChatGPT)
+    tools_page_requested = Signal(str)            # "Open in play tools" under an answer: that page
+    settings_section_requested = Signal(str)      # an error's fix: Settings at that section ("ai")
 
     def __init__(self, settings: Settings, profiles: Profiles, kb: KnowledgeBase, brain: Brain):
         super().__init__(None, Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
@@ -287,6 +312,10 @@ class Overlay(QWidget):
         self.feed_lay.addStretch(1)
         self.scroll.setWidget(self.feed)
         lay.addWidget(self.scroll, 1)
+        # an empty chat: a few questions for this character (the first message hides them)
+        self.starters = Chips()
+        lay.addWidget(self.starters)
+        self._next_steps = None      # under the newest answer: play tools, follow-ups or an error's fix
         self._follow = True          # keep the newest content in view (off once an answer outgrows the view)
         self._anchor = None          # the answer being read: stay at its first line
         self.scroll.verticalScrollBar().rangeChanged.connect(self._on_range)
@@ -366,7 +395,7 @@ class Overlay(QWidget):
         self.saver_badge.setToolTip(self.t("saver_hint"))
         self.wish_btn.setToolTip(self.t("wishlist"))
         self.guides_btn.setToolTip(self.t("guides"))
-        self.history_btn.setToolTip(self.t("history"))
+        self.history_btn.setToolTip(self.t("history_tip"))
         self.profile_card.refresh.setToolTip(self.t("refresh_tip"))
         self.profile_card.now_btn.setText(self.t("plan_what_now"))
         self.profile_card.now_btn.setToolTip(self.t("what_now_tip"))
@@ -374,7 +403,9 @@ class Overlay(QWidget):
             self.show_update(self._update_version, getattr(self, "_update_state", "available"))
         self.profile_card.setToolTip(self.t("switch_character"))
         self.min_btn.setToolTip(self.t("minimize"))
-        self.close_btn.setToolTip(self.t("close_chat").replace("F9", self.settings["hotkey_toggle"]))
+        self.close_btn.setToolTip(self.t("close_chat_tip").replace("F9", self.settings["hotkey_toggle"]))
+        self.input.setToolTip(self.t("keys_hint"))
+        self.apply_window_prefs()
         self.mic_btn.setToolTip(self.t("mic_tip", key=hk_voice))
         self._on_text(self.input.text())
         self.refresh_profile_chip()
@@ -411,6 +442,7 @@ class Overlay(QWidget):
             self.profile_card.show_character(c, self.profiles.avatar_path(c), self.kb, self.t.rtl)
         self.refresh_plan()
         self.refresh_pins()
+        self._refresh_starters()
 
     # ------------------------------------------------------------------ plan (EXP, tips, "My plan")
 
@@ -488,7 +520,7 @@ class Overlay(QWidget):
             except Exception:      # noqa: BLE001 - a failed lookup is just "no game"
                 hwnd = self.game_hwnd
             shot = self._shoot(hwnd)          # never raises: the chat always comes back
-            self.setWindowOpacity(1.0)
+            self.setWindowOpacity(self.full_opacity())
             then(hwnd, shot)
         QTimer.singleShot(120, shoot)
 
@@ -611,7 +643,7 @@ class Overlay(QWidget):
         fade = QPropertyAnimation(self, b"windowOpacity")
         fade.setDuration(220 if show else 150)
         fade.setStartValue(self.windowOpacity())
-        fade.setEndValue(1.0 if show else 0.0)
+        fade.setEndValue(self.full_opacity() if show else 0.0)
         fade.setEasingCurve(QEasingCurve.OutCubic)
         grp = QParallelAnimationGroup(self)
         grp.addAnimation(fade)
@@ -630,7 +662,28 @@ class Overlay(QWidget):
         self._anim = grp
         grp.start(QAbstractAnimation.DeleteWhenStopped)
 
+    def full_opacity(self) -> float:
+        """What "fully shown" means: the player's chat opacity (Settings, 60-100%)."""
+        return max(0.6, min(1.0, (self.settings["chat_opacity"] or 100) / 100))
+
+    def apply_window_prefs(self):
+        """Opacity and click-through from Settings. Click-through: the chat stays on screen, clicks go to the game."""
+        through = bool(self.settings["click_through"])
+        if bool(self.windowFlags() & Qt.WindowTransparentForInput) != through:
+            shown = self.isVisible()
+            self.setWindowFlag(Qt.WindowTransparentForInput, through)
+            if shown:
+                self.show()                    # a changed window flag hides the window
+                osapi.float_over_fullscreen(int(self.winId()))
+                if through:
+                    self.add_system(self.t("click_through_on"))
+        if self.isVisible() and self.windowOpacity() > 0 and not (self._anim is not None and _alive(self._anim)):
+            self.setWindowOpacity(self.full_opacity())
+
     def open_overlay(self, shot: bytes | None, game_hwnd: int | None):
+        if self.settings["click_through"]:
+            self.settings["click_through"] = False     # F9 never opens a chat the mouse can't reach
+            self.apply_window_prefs()
         self.shot, self.shot_used, self.game_hwnd = shot, False, game_hwnd
         self._update_shot_hint()
         if not self.settings["window"]:
@@ -705,9 +758,18 @@ class Overlay(QWidget):
             self.open_overlay(self._shoot(hwnd), hwnd)
 
     def keyPressEvent(self, e):
-        # Esc stops an answer; it never closes the chat (F9 or the window buttons do).
+        # Esc stops a running answer, else closes the chat; ↑ in an empty field brings the last question back;
+        # Ctrl+F searches past chats
+        from PySide6.QtGui import QKeySequence
         if e.key() == Qt.Key_Escape:
-            self.stop_answer()
+            self.stop_answer() if self.busy else self.close_overlay()
+            return
+        if e.key() == Qt.Key_Up and not self.input.text() and getattr(self, "_last_question", ""):
+            self.input.setText(self._last_question)
+            self.input.setFocus()
+            return
+        if e.matches(QKeySequence.Find):
+            self.history_requested.emit()
             return
         super().keyPressEvent(e)
 
@@ -733,8 +795,12 @@ class Overlay(QWidget):
 
     def _recaptured(self, hwnd, shot):
         self.game_hwnd, self.shot, self.shot_used = hwnd, shot, False
-        self.add_system("✓ " + self.t("recaptured") if self.shot else self.t("sync_no_game"))
+        self.add_system("✓ " + self.t("recaptured")) if self.shot else self._game_notice("sync_no_game")
         self._update_shot_hint()
+
+    def _game_notice(self, key: str):
+        """No game window: say so, with the way to fix it one tap away (windowed / borderless mode)."""
+        self.add_notice(lambda t: t(key), lambda t: t("fix_game"), lambda: self.add_system(self.t("game_help")))
 
     # ------------------------------------------------------------------ feed
 
@@ -776,6 +842,59 @@ class Overlay(QWidget):
             w = self.feed_lay.takeAt(0).widget()
             if w:
                 w.deleteLater()
+        self._next_steps = None
+        self._refresh_starters()
+
+    def _refresh_starters(self):
+        """Questions to start with, while the chat has no messages (new character, cleared history, first open)."""
+        from .. import suggest
+        self.starters.clear()
+        talk = any(isinstance(self.feed_lay.itemAt(i).widget(), BubbleRow) for i in range(self.feed_lay.count() - 1))
+        if talk:
+            self.starters.hide()
+            return
+        self.starters.set_title(self.t("sug_title"), self.t.rtl)
+        for q in suggest.starters(self.kb, self.profiles.active, self.t):
+            self.starters.add(q, lambda q=q: self.ask(q), "NowChip", self.t.rtl)
+        self.starters.show()
+
+    def _drop_next_steps(self):
+        if self._next_steps is not None and _alive(self._next_steps):
+            self._next_steps.hide()
+            self._next_steps.deleteLater()
+        self._next_steps = None
+
+    def _add_next_steps(self, question: str, entities: list[str], groups: list | None = None, fix=None):
+        """Under the newest answer: an error's one-tap fix, or the play-tools page it belongs to and follow-up
+        questions about its main card. Older answers lose theirs."""
+        from .. import suggest
+        self._drop_next_steps()
+        t, rtl, chips = self.t, self.t.rtl, Chips()
+        if fix:
+            label, action = fix
+            do = {"retry": lambda: self._ask_tagged(question, self._asked_focus, again=True),
+                  "settings": lambda: self.settings_section_requested.emit("ai"),
+                  "saver": self.saver_requested.emit}[action]
+            chips.add(t.p(label, self.settings["provider"]), do, "NowChip", rtl)
+        else:
+            page = suggest.tools_page(question, entities)
+            if page:
+                chips.add(t("open_in_tools", page=t(f"tool_{page}")), lambda: self.tools_page_requested.emit(page),
+                          "NowChip", rtl)
+            fu = suggest.follow_ups(entities, groups)
+            for k in fu[1] if fu else []:
+                if k != "fu_level" or self.profiles.active:
+                    chips.add(t(k), lambda q=t(k), key=fu[0]: self._ask_tagged(q, [key]), "SubChip", rtl)
+        if chips.count():
+            self._add_widget(chips)
+            self._next_steps = chips
+
+    def _ask_tagged(self, question: str, keys: list[str], again: bool = False):
+        """Ask about these cards (the tagging the player does by tapping a card), then put their own tags back."""
+        before = list(self.focus_keys)
+        self.set_tags(keys)
+        self.ask(question, force_claude=again)
+        self.set_tags(before)
 
     MAX_TAGS = 5
 
@@ -813,6 +932,7 @@ class Overlay(QWidget):
         self.set_tags([key] if key else [])
 
     def add_bubble(self, text: str, role: str, tag: str = "") -> Bubble:
+        self.starters.hide()                 # the conversation started
         b = Bubble(text, role, self.t.rtl, tag)
         self._add_widget(BubbleRow(b, self.t.rtl))
         return b
@@ -886,6 +1006,8 @@ class Overlay(QWidget):
         self._asked_cid = c.id if c else None
         history = History(c.id) if c else None
         focus = list(self.focus_keys)
+        self._asked_focus = focus
+        self._drop_next_steps()
         focus_name = ", ".join(self.kb.get(k)["name"] for k in focus)
         if not force_claude:          # "Ask Claude anyway" re-asks a question already in the chat
             self.add_bubble(question, "user", focus_name)
@@ -901,14 +1023,15 @@ class Overlay(QWidget):
         shot = None if self.shot_used else self.shot
         self._question_shot = shot
         if shot is None and not self.shot_used and not self.game_hwnd:
-            self.add_system(self.t("no_game"))
+            self._game_notice("no_game")
         self.shot_used = True
         self._update_shot_hint()
         if history:   # again for "Ask Claude anyway", so history search pairs the question with this answer
             history.append("user", f"[about {focus_name}] {question}" if focus_name else question)
         self._anchor = None
         self._follow = True
-        self._pending_bubble = self.add_bubble(self.t("thinking"), "assistant")
+        self._pending_bubble = self.add_bubble(self.t("status_shot" if shot else "thinking"), "assistant")
+        self._answer_started = False          # until text streams, the bubble says what the AI is doing
         self.busy = True
         self._on_text(self.input.text())      # send turns into stop
 
@@ -917,6 +1040,7 @@ class Overlay(QWidget):
         self._worker.moveToThread(self._thread)
         self._thread.started.connect(self._worker.run)
         self._worker.delta.connect(self._on_delta)
+        self._worker.status.connect(self._on_status)
         # a bound method of this QObject → Qt queues the call onto the GUI thread.
         # (a lambda here would run in the worker thread and build widgets there: crash + stray window)
         self._pending_history = history
@@ -993,6 +1117,7 @@ class Overlay(QWidget):
             self._add_widget(DropGroupCard(self.kb, g["monster"], g["items"]))
         if qa.entities and not qa.drop_groups:     # the drop groups already show the item
             self.add_cards(qa.entities)
+        self._add_next_steps(question, qa.entities, qa.drop_groups)
 
     def _on_range(self, _lo: int, hi: int):
         bar = self.scroll.verticalScrollBar()
@@ -1016,8 +1141,19 @@ class Overlay(QWidget):
             self._anchor = row
             self.scroll.verticalScrollBar().setValue(self._anchor_top())
 
+    def _on_status(self, code: str):
+        """What the AI is doing before it writes: searching the database, reading about a monster…"""
+        if not (self._pending_bubble and self.busy) or self._stopping or self._answer_started:
+            return
+        kind, _, key = code.partition(":")
+        e = self.kb.get(key) if key else None
+        text = self.t("status_search") if kind == "search" else \
+            self.t("status_read", name=e["name"]) if e else self.t("status_read_any")
+        self._pending_bubble.set_text(text, explain=False)
+
     def _on_delta(self, text: str):
         if self._pending_bubble and text and not self._stopping:
+            self._answer_started = True
             self._delta_text = text
             if not self._delta_timer.isActive():
                 self._delta_timer.start()
@@ -1060,7 +1196,7 @@ class Overlay(QWidget):
         if not shot:
             self._syncing = False
             self.profile_card.set_busy(False)
-            self.add_system(self.t("sync_no_game"))
+            self._game_notice("sync_no_game")
             self.sync_finished.emit(False)
             return
         self._sync_shot = shot
@@ -1115,13 +1251,14 @@ class Overlay(QWidget):
         if ans.error:
             import logging
             logging.getLogger(__name__).warning("answer failed: %s", ans.error)
-            key = f"err_{ans.error}" if ans.error in ("offline", "not_logged_in", "usage_limit",
-                                                      "not_installed") else "err_generic"
+            key, fix = error_view(ans.error, self.settings["saver_mode"])
             self._pending_bubble.set_text(self.t.p(key, self.settings["provider"]))
+            self._add_next_steps(getattr(self, "_last_question", ""), [], fix=fix)
             return
         self._pending_bubble.set_text(ans.text)
         q = getattr(self, "_last_question", "")
         self._pending_bubble.add_pin(lambda q=q, a=ans.text: self.pin_answer(q, a), self.t("pin"))
+        self._answer_footer(q, ans)
         QTimer.singleShot(0, self._keep_answer_readable)
         QTimer.singleShot(250, self._keep_answer_readable)   # after the cards' layout settles
         if history:
@@ -1130,10 +1267,28 @@ class Overlay(QWidget):
             self._add_widget(DropGroupCard(self.kb, g["monster"], g["items"]))
         if ans.entities:
             self.add_cards(ans.entities)
+        self._add_next_steps(q, ans.entities, ans.drop_groups)
         if self.profiles.active_id == getattr(self, "_asked_cid", None):
             self._apply_profile_update(ans.profile_update)
             if ans.avatar_box and getattr(self, "_question_shot", None):
                 self._update_avatar(self._question_shot, ans.avatar_box)
+
+    def _answer_footer(self, question: str, ans: Answer):
+        """Beside the 📌: 👍/👎 (kept on this PC only) and, on an API key, what the answer cost."""
+        import threading
+
+        from .. import costs, feedback
+        row = footer(self._pending_bubble)
+        rating = Rating(self.t)
+        model, lang = ans.model or getattr(self.brain, "model", None), self.t.lang
+        rating.rated.connect(lambda r: threading.Thread(
+            target=feedback.add, args=(question, ans.text, r, ans.entities, model, lang), daemon=True).start())
+        row.insertWidget(row.count() - 1, rating)
+        if ans.cost_usd and getattr(self.brain, "api_key", None):     # a subscription has no per-answer cost
+            cost = QLabel(costs.label(ans.cost_usd), objectName="SystemLine")
+            cost.setToolTip(self.t("cost_tip"))
+            row.insertWidget(0, cost)
+            threading.Thread(target=costs.add, args=(ans.cost_usd,), daemon=True).start()
 
     def _apply_profile_update(self, update: dict):
         c = self.profiles.active

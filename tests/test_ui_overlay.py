@@ -43,7 +43,7 @@ class FakeBrain:
         self.cancelled = threading.Event()
         self.hold = hold
 
-    def ask(self, question, character, history, shot, on_delta=None, focus=None):
+    def ask(self, question, character, history, shot, on_delta=None, focus=None, on_status=None):
         from maplehelper.brain import Answer
         for part in ("Hel", "Hello", "Hello there", "Hello there"):
             if on_delta:

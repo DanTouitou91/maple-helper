@@ -114,6 +114,8 @@ class MapleHelperApp:
         # play tools: the EXP meter lives as long as the app (the window may close in between)
         self.exp_meter: dict = {}
         self.overlay.tools_requested.connect(lambda: self.show_tools())
+        self.overlay.tools_page_requested.connect(self.open_tools_at)
+        self.overlay.settings_section_requested.connect(self.open_settings)
         self.overlay.profile_changed.connect(self.on_profile_changed)
         self.overlay.sync_finished.connect(lambda ok: self._tools_call("sync_done", ok))
 
@@ -289,6 +291,10 @@ class MapleHelperApp:
         a_quit = QAction(t("tray_quit"), menu, triggered=self.qapp.quit)
         menu.addAction(a_show)
         menu.addAction(a_set)
+        # click-through: the chat stays over the game but the mouse goes to the game (F9 turns it off)
+        a_through = QAction(t("click_through"), menu, checkable=True, triggered=self.set_click_through)
+        menu.aboutToShow.connect(lambda: a_through.setChecked(bool(self.settings["click_through"])))
+        menu.addAction(a_through)
         if getattr(self, "pending_installer", None):
             a_upd = QAction(t("update_now_tray", version=updater.installer_version(self.pending_installer)), menu,
                             triggered=self.update_now)
@@ -301,7 +307,11 @@ class MapleHelperApp:
         self.tray.show()
         self._tray_menu = menu
 
-    def open_settings(self):
+    def set_click_through(self, on: bool):
+        self.settings["click_through"] = bool(on)
+        self.overlay.apply_window_prefs()
+
+    def open_settings(self, section: str | None = None):
         def make():
             dlg = SettingsDialog(self.settings, self.profiles, self.kb, self.style)
             dlg.changed.connect(self.on_settings_changed)
@@ -312,7 +322,9 @@ class MapleHelperApp:
             dlg.patch_notes_requested.connect(lambda: self.show_patch_notes())
             dlg.whats_new_requested.connect(lambda: self.show_whats_new())
             return dlg
-        self.open_window("settings", make, on_close=self.overlay.refresh_profile_chip)
+        dlg = self.open_window("settings", make, on_close=self.overlay.refresh_profile_chip)
+        if section:
+            dlg.show_section(section)
 
     def add_character(self):
         before = self.profiles.active_id
@@ -586,6 +598,13 @@ class MapleHelperApp:
             dlg.guide_requested.connect(self.show_guides)
             return dlg
         self.open_window("tools", make)
+
+    def open_tools_at(self, page: str):
+        """"Open in play tools" under an answer: the tools window at that page (an open one turns to it)."""
+        from .ui.tools import PAGES
+        self.show_tools(page)
+        if page in PAGES:
+            self._tools_call("show_page", PAGES.index(page))
 
     def ask_from_tools(self, question: str, with_screenshot: bool):
         if not self.overlay.isVisible():

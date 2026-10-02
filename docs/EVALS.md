@@ -57,3 +57,16 @@ in the report before acting on it; a run of failures in one kind is a real regre
     Claude mode only (NPCs, quests, guides).
 - Run quick mode. If a new case fails because quick.py is wrong, fix quick.py with a regression test in
   `tests/test_quick.py`; don't weaken the case to match the bug.
+
+## Cases from players' 👎
+
+The chat's 👍/👎 are saved only on the player's PC (`feedback.json` in the app's data folder: `%APPDATA%\MapleHelper`
+on Windows, `~/Library/Application Support/MapleHelper` on macOS). From a copy of that file:
+
+```powershell
+.venv\Scripts\python.exe tools\feedback_evals.py C:\path\to\feedback.json     # -> evals/feedback_drafts.json
+```
+
+Every 👎 question that `answers.json` doesn't have yet becomes a draft case, with the disliked answer in its `note`
+and `must_mention` pre-filled with the KB names the question mentions (or no checks, when it names nothing). Fill
+the checks from `data/kb` as above, then move the case into `answers.json`.

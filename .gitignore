@@ -16,3 +16,4 @@ test-results.xml
 
 # answer-eval runs (tools/eval_answers.py --mode claude)
 evals/reports/
+evals/feedback_drafts.json
