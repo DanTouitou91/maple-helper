@@ -652,6 +652,29 @@ class SettingsDialog(GlassDialog):
         self._limits_bridge = _Bridge()
         self._limits_bridge.account.connect(self._on_limits)
         self._label_usage()
+        # on an API key every answer costs money: this month's total (counted on this PC; a plan login has none)
+        if settings.api_key_mode(self._ai().name):
+            from .. import costs
+            month = QLabel(bidi.plain(t("cost_month", usd=f"{costs.month_total():.2f}"), rtl), objectName="RowHint")
+            month.setContentsMargins(0, 8, 0, 8)
+            sec.add_widget(month)
+        # the chat window over the game: how solid it is, and whether clicks pass through it to the game
+        from PySide6.QtWidgets import QSlider
+
+        from .controls import track_slider
+        sec = Section(t("sec_chat_window"), rtl)
+        self.opacity = QSlider(Qt.Horizontal)
+        self.opacity.setRange(60, 100)
+        self.opacity.setSingleStep(5)
+        self.opacity.setPageStep(10)
+        self.opacity.setValue(settings["chat_opacity"] or 100)
+        self.opacity.setFixedWidth(170)
+        track_slider(self.opacity, rtl)
+        sec.add_row(t("chat_opacity"), self.opacity)
+        self.click_through = Switch(settings["click_through"])
+        sec.add_row(t("click_through"), self.click_through, hint=t("click_through_hint"))
+        lay.addWidget(sec)
+        self._scroll, self._ai_row = scroll, self.provider_pick     # show_section("ai") scrolls to it
 
         # privacy & system
         sec = Section(t("sec_system"), rtl)
@@ -706,6 +729,12 @@ class SettingsDialog(GlassDialog):
 
     def _ai(self):
         return providers.get(self.settings["provider"])
+
+    def show_section(self, name: str):
+        """Open at a section ("ai": the AI account), e.g. from an error's "Sign in" in the chat."""
+        if name == "ai":
+            QTimer.singleShot(0, lambda: self._scroll.verticalScrollBar().setValue(
+                self._ai_row.mapTo(self._scroll.widget(), self._ai_row.rect().topLeft()).y() - 48))
 
     def _label_usage(self):
         """The meter shows the plan of the AI that answers now (Claude's or ChatGPT's); saver mode is there for both."""
@@ -910,6 +939,8 @@ class SettingsDialog(GlassDialog):
             "saver_mode": self.saver.isChecked(),
             "answer_length": self.length.value(),
             "start_with_windows": self.autostart.isChecked(),
+            "chat_opacity": self.opacity.value(),
+            "click_through": self.click_through.isChecked(),
         })
         s.save()
         self.changed.emit()

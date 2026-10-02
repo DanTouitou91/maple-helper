@@ -232,15 +232,16 @@ class Brain:
         self.backend.cancel()
 
     def ask(self, question: str, character: Character | None, history: History | None,
-            screenshot_jpeg: bytes | None, on_delta=None, focus=None) -> Answer:
-        """Blocking call; on_delta(visible_text_so_far) is invoked while the answer streams."""
+            screenshot_jpeg: bytes | None, on_delta=None, focus=None, on_status=None) -> Answer:
+        """Blocking call; on_delta(visible_text_so_far) is invoked while the answer streams, on_status(code)
+        while the AI looks things up ("search", "read:<kb key>"; Claude only)."""
         if not self.backend.exe:
             return Answer(error="not_installed")
         self.cancelled = False
         self.kb.ensure_drop_table()
         prompt = build_prompt(question, character, history, self.kb, screenshot_jpeg is not None, self.length, focus)
         raw_delta = (lambda raw: on_delta(raw.split(META)[0].strip())) if on_delta else None
-        result = self.backend.run(prompt, screenshot_jpeg, raw_delta)
+        result = self.backend.run(prompt, screenshot_jpeg, raw_delta, **({"on_status": on_status} if on_status else {}))
         if self.cancelled:
             return Answer(error="cancelled", limits=result.limits)
         if result.error:
