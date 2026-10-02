@@ -217,6 +217,15 @@ class KnowledgeBase:
     def drop_source(self, monster: str, item: str) -> str | None:
         return self.drop_sources(monster).get(item)
 
+    def badge_source(self, monster: str, item: str) -> str | None:
+        """drop_source for a badge: None while the database confirms no drop at all (every drop would read
+        "MSEA ref", which tells the player nothing)."""
+        return self.drop_source(monster, item) if self.confirms_drops else None
+
+    @cached_property
+    def confirms_drops(self) -> bool:
+        return any("classic" in self.drop_sources(m).values() for ms in self.droppers.values() for m in ms)
+
     @cached_property
     def droppers(self) -> dict[str, list[str]]:
         """item key → monster keys that drop it (lowest level first)."""

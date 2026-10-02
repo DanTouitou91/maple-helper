@@ -59,7 +59,7 @@ class WishlistDialog(GlassDialog):
                     lvl = (e.get("props") or {}).get("Level")
                     maps = kb._top_maps(m, n=1)
                     lines.append((f"• {e.get('name', m)}" + (f" (Lv. {lvl})" if lvl else "")
-                                  + (f" · {maps[0]}" if maps else ""), kb.drop_source(m, k)))
+                                  + (f" · {maps[0]}" if maps else ""), kb.badge_source(m, k)))
                 if len(droppers) > SHOWN_DROPPERS:
                     lines.append((t("pn_more", n=len(droppers) - SHOWN_DROPPERS), None))
             else:

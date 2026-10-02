@@ -387,3 +387,22 @@ def test_wishlist_window_shows_a_price_drop_once(qt_app, isolated_store, drop_kb
     d.check_prices(force=True)                                           # "Check prices": again, no second toast
     settle(qt_app, 300)
     assert calls == ["Blue Potion"] * 2 and len(toasts) == 1
+
+
+
+
+def test_badges_show_once_anything_is_confirmed(drop_kb):
+    kb = KnowledgeBase(drop_kb)
+    assert kb.confirms_drops and kb.badge_source("monster/100100", "item/2000001") == "msea"
+
+
+
+def test_no_badges_while_nothing_is_confirmed(drop_kb):
+    # the live database's "Drops (MS Classic)" lists are empty: "MSEA ref" on every drop would tell nothing
+    unconfirmed = SNAIL.replace("Use\n1\nRed Potion\nPotion\n", "", 1)
+    assert unconfirmed != SNAIL
+    _page(drop_kb, "monster/100100", "Snail", {"Level": 1, "HP": 8, "EXP": 3}, unconfirmed)
+    kb = KnowledgeBase(drop_kb)
+    pairs = [(m, i) for i, ms in kb.droppers.items() for m in ms]
+    assert pairs and not kb.confirms_drops
+    assert all(kb.drop_source(m, i) == "msea" and kb.badge_source(m, i) is None for m, i in pairs)

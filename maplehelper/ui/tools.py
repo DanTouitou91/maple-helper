@@ -877,7 +877,7 @@ class ToolsDialog(GlassDialog):
         for mk in self.kb.droppers.get(key, [])[:3] if key else []:
             e = self.kb.get(mk) or {}
             lv = (e.get("props") or {}).get("Level")
-            src = self.kb.drop_source(mk, key)
+            src = self.kb.badge_source(mk, key)
             mobs.append(f"<a href='{mk}' style='color: {theme.ORANGE_DEEP}; text-decoration: none;'>"
                         f"{html.escape(e.get('name', mk))}</a>" + (f" Lv. {lv}" if lv else "")
                         + (f" <span style='color: {colors[src]};'>({html.escape(self.t('drop_' + src))})</span>" if src else ""))
@@ -1479,7 +1479,7 @@ class ToolsDialog(GlassDialog):
             link.setCursor(Qt.PointingHandCursor)
             link.clicked.connect(lambda _=False, k=m: self.tag_requested.emit(k))
             row.addWidget(link)
-            badge = drop_badge(self.kb.drop_source(m, key))
+            badge = drop_badge(self.kb.badge_source(m, key))
             if badge:
                 row.addWidget(badge, 0, Qt.AlignVCenter)
             row.addStretch(1)

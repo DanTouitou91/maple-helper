@@ -644,7 +644,7 @@ class DropGroupCard(QFrame):
         grid = QGridLayout()
         grid.setSpacing(6)
         for i, k in enumerate(items):
-            grid.addWidget(EntityTile(kb, k, kb.drop_source(monster, k)), i // 2, i % 2)
+            grid.addWidget(EntityTile(kb, k, kb.badge_source(monster, k)), i // 2, i % 2)
         outer.addLayout(grid)
 
 
