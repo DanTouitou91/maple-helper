@@ -86,6 +86,6 @@ def test_problem_report_reads_the_sign_in_status_off_the_gui_thread(app_cls, mon
     class Settings(dict):
         data = {}
     a = fake_app(app_cls)
-    a.settings = Settings(language="en", provider="claude")
+    a.settings = Settings(language="en", provider="claude", no_ai=False)
     app_cls.make_report(a)
     assert a.done.wait(5) and seen["thread"] is not gui and seen["ai"] == "Claude: ok"

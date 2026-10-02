@@ -49,6 +49,8 @@ class Switch(QAbstractButton):
         track = QRectF(0, (self.height() - h) / 2, w, h)
         off = QColor(120, 120, 128, 90) if theme.MODE == "dark" else QColor(120, 120, 128, 60)
         on = QColor(52, 199, 89)                       # iOS system green
+        if theme.MODE == "contrast":
+            off, on = QColor(74, 74, 74), QColor(11, 93, 30)
         t = self._pos
         col = QColor(int(off.red() + (on.red() - off.red()) * t), int(off.green() + (on.green() - off.green()) * t),
                      int(off.blue() + (on.blue() - off.blue()) * t), int(off.alpha() + (255 - off.alpha()) * t))
@@ -62,6 +64,10 @@ class Switch(QAbstractButton):
         p.drawEllipse(QRectF(x, track.top() + 3, h - 4, h - 4))
         p.setBrush(QColor(255, 255, 255))
         p.drawEllipse(QRectF(x, track.top() + 2, h - 4, h - 4))
+        if self.hasFocus() and self.property("keyfocus"):        # reached with Tab (see a11y.py)
+            p.setBrush(Qt.NoBrush)
+            p.setPen(QPen(QColor(theme.P()["focus"]), 2))
+            p.drawRoundedRect(track.adjusted(1, 1, -1, -1), h / 2 - 1, h / 2 - 1)
 
 
 class Segmented(QFrame):
@@ -146,6 +152,8 @@ class Section(QFrame):
             col.addWidget(hl)
         lay.addLayout(col, 1)
         if control is not None:
+            if isinstance(control, Switch) and not control.accessibleName():
+                control.setAccessibleName(label)        # a switch has no text for a screen reader to read
             control.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
             lay.addWidget(control, 0, Qt.AlignVCenter)
         self.rows.addWidget(row)

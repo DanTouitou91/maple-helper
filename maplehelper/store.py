@@ -115,6 +115,7 @@ DEFAULT_SETTINGS = {
     "last_session": None,         # summary of the previous play session, shown when the chat next opens
     "instant_answers": True,      # simple factual questions answered from the KB, without Claude
     "wish_prices": {},            # item key -> {"median": last Free Market median seen, "t", "alerted": a drop shown}
+    "no_ai": False,               # "use without AI for now": instant answers, guides and tools; no AI CLI ever runs
 }
 
 

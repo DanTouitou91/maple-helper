@@ -1,4 +1,4 @@
-"""Onboarding (mandatory, no skipping), character editor and settings."""
+"""Onboarding (language and character; the AI can wait), character editor and settings."""
 from __future__ import annotations
 
 import sys
@@ -180,10 +180,12 @@ class CharacterForm(QWidget):
 
 
 class Onboarding(GlassDialog):
-    """Language → AI connection (Claude or Codex) → character. Every step is required."""
+    """Language → character → AI connection (Claude or Codex, optional: "use without AI for now") → done.
+
+    only_character: just the character page (add / edit); only_ai: just the AI page (connecting later)."""
 
     def __init__(self, settings: Settings, profiles: Profiles, kb: KnowledgeBase, stylesheet_fn, only_character=False,
-                 edit_id: str | None = None):
+                 edit_id: str | None = None, only_ai=False):
         self.t = I18n(settings["language"] or "he")
         self.edit_id = edit_id
         only_character = only_character or edit_id is not None
@@ -192,6 +194,7 @@ class Onboarding(GlassDialog):
         self.settings, self.profiles, self.kb = settings, profiles, kb
         self.stylesheet_fn = stylesheet_fn
         self.only_character = only_character
+        self.only_ai = only_ai and not only_character
         self.resize(600, 680)
         self._bridge = _Bridge()
         self._bridge.status.connect(self._on_status)
@@ -212,17 +215,28 @@ class Onboarding(GlassDialog):
         self.next = QPushButton(self.t("ob_next"), objectName="Primary")
         self.back.clicked.connect(self._go_back)
         self.next.clicked.connect(self._go_next)
+        # the AI is optional: instant answers, guides and play tools work without it
+        self.later = QPushButton(self.t("ob_ai_later"), objectName="Link")
+        self.later.setCursor(Qt.PointingHandCursor)
+        self.later.clicked.connect(self._skip_ai)
         nav.addWidget(self.back)
         nav.addStretch(1)
+        nav.addWidget(self.later)
         nav.addWidget(self.next)
         outer.addLayout(nav)
 
+        full = not (self.only_character or self.only_ai)
+        self.lang_page = self.ai_page = None
         self.pages = []
+        if full:
+            self.lang_page = self._page_language()
+            self.pages.append(self.lang_page)
+        if not self.only_ai:
+            self.pages.append(self._page_character())
         if not self.only_character:
-            self.pages.append(self._page_language())
-            self.pages.append(self._page_ai())
-        self.pages.append(self._page_character())
-        if not self.only_character:
+            self.ai_page = self._page_ai()
+            self.pages.append(self.ai_page)
+        if full:
             self.pages.append(self._page_done())
         for p in self.pages:
             self.stack.addWidget(p)
@@ -259,7 +273,15 @@ class Onboarding(GlassDialog):
         self.lang_group.buttonClicked.connect(self._on_language)
         lay.addLayout(row)
         lay.addStretch(1)
+        privacy = QPushButton(self.t("privacy"), objectName="Link")
+        privacy.setCursor(Qt.PointingHandCursor)
+        privacy.clicked.connect(self._show_privacy)
+        lay.addWidget(privacy, 0, Qt.AlignHCenter)
         return w
+
+    def _show_privacy(self):
+        from .privacy import PrivacyDialog
+        PrivacyDialog(self.t.lang, self.stylesheet_fn(1.0)).exec()
 
     def _page_ai(self):
         w = QWidget()
@@ -312,6 +334,9 @@ class Onboarding(GlassDialog):
         krow.addWidget(key_btn)
         sec.add_widget(kbox)
         lay.addWidget(sec)
+        if not self.only_ai:
+            lay.addSpacing(4)
+            lay.addWidget(_body(self.t("ob_ai_optional")))
         lay.addStretch(1)
         self._label_ai_page()
         return w
@@ -328,8 +353,13 @@ class Onboarding(GlassDialog):
         self.login_btn.setText(t.p("ob_login", p))
         self.key_edit.clear()
         self.key_edit.setPlaceholderText(t.p("ob_api_key_hint", p))
-        if getattr(self, "privacy_label", None):          # the done page is built after this one
-            self.privacy_label.setText(bidi.plain(t.p("ob_privacy", p), t.rtl))
+        self._label_privacy()
+
+    def _label_privacy(self):
+        if getattr(self, "privacy_label", None):          # the done page is built after the AI page
+            t = self.t
+            self.privacy_label.setText(bidi.plain(t("ob_privacy_no_ai") if self.settings["no_ai"]
+                                                  else t.p("ob_privacy", self.provider), t.rtl))
 
     def _on_provider(self, name: str):
         self.provider = self.settings["provider"] = name
@@ -372,6 +402,7 @@ class Onboarding(GlassDialog):
         sec = Section("", self.t.rtl)
         sec.add_row(self.t("ob_borderless"))
         self.privacy_label = sec.add_row(self.t.p("ob_privacy", self.provider)).findChild(QLabel, "RowLabel")
+        self._label_privacy()
         sec.add_row(self.t("disclaimer"))
         lay.addWidget(sec)
         note = QLabel(bidi.plain(self.t("unofficial"), self.t.rtl), objectName="RowHint")
@@ -459,14 +490,18 @@ class Onboarding(GlassDialog):
 
     def showEvent(self, e):
         super().showEvent(e)
-        if not self.only_character:
+        self._entered()
+
+    def _entered(self):
+        # the AI's CLI is only asked once the player reaches its page (skipping it runs nothing)
+        if self.ai_page is not None and self.stack.currentWidget() is self.ai_page and not self._ai_ok:
             self._check_status()
 
     def _current_ok(self) -> bool:
         page = self.stack.currentWidget()
-        if not self.only_character and page is self.pages[0]:
+        if page is self.lang_page:
             return self.lang_group.checkedButton() is not None
-        if not self.only_character and page is self.pages[1]:
+        if page is self.ai_page:
             return self._ai_ok
         if page.findChild(CharacterForm):
             return self.form.valid()
@@ -479,28 +514,43 @@ class Onboarding(GlassDialog):
         finish = self.t("save_changes") if self.edit_id else self.t("ob_finish")
         self.next.setText(bidi.plain(finish if last else self.t("ob_next"), self.t.rtl))
         self.next.setEnabled(self._current_ok())
+        self.later.setVisible(self.stack.currentWidget() is self.ai_page and not self.only_ai and not self._ai_ok)
 
     def _go_back(self):
         self.stack.setCurrentIndex(max(0, self.stack.currentIndex() - 1))
         self._update_nav()
+        self._entered()
 
     def _go_next(self):
         if not self._current_ok():
             return
+        if self.stack.currentWidget() is self.ai_page:
+            self.settings["no_ai"] = False            # connected: questions go to the AI
+            self._label_privacy()
         if self.stack.currentIndex() == self.stack.count() - 1:
             if self.edit_id:
                 self.profiles.edit(self.edit_id, *self.form.values())
-            else:
+            elif not self.only_ai:
                 self.profiles.add(*self.form.values())
-            if not self.only_character:
+            if not (self.only_character or self.only_ai):
                 self.settings["onboarding_done"] = True
             self.accept()
             return
         self.stack.setCurrentIndex(self.stack.currentIndex() + 1)
         self._update_nav()
+        self._entered()
+
+    def _skip_ai(self):
+        """"Use without AI for now": nothing runs an AI CLI until the player connects one in Settings."""
+        self.settings["no_ai"] = True
+        if hasattr(self, "_poll_timer"):
+            self._poll_timer.stop()                # after Install / Sign in: no more status checks
+        self._label_privacy()
+        self.stack.setCurrentIndex(self.stack.currentIndex() + 1)
+        self._update_nav()
 
     def restart_on_language(self):
-        """After a language restart, open straight on the AI step."""
+        """After a language restart, open straight on the step after the language."""
         if not self.only_character and self.stack.count() > 1:
             self.stack.setCurrentIndex(1)
             self._update_nav()
@@ -565,8 +615,8 @@ class SettingsDialog(GlassDialog):
 
         # appearance
         sec = Section(t("sec_appearance"), rtl)
-        self.appearance = Segmented([(t("appearance_dark_short"), "dark"), (t("appearance_light_short"), "light")],
-                                    settings["appearance"], rtl)
+        self.appearance = Segmented([(t("appearance_dark_short"), "dark"), (t("appearance_light_short"), "light"),
+                                     (t("appearance_contrast_short"), "contrast")], settings["appearance"], rtl)
         sec.add_row(t("appearance"), self.appearance)
         self.font = Segmented([("A", 13), ("A", 14), ("A", 16)], settings["font_size"], rtl)
         # small / medium / large "A" (the stylesheet wins over setFont, so size it there)
@@ -681,6 +731,10 @@ class SettingsDialog(GlassDialog):
         sec = Section(t("sec_system"), rtl)
         self.autostart = Switch(settings["start_with_windows"])
         sec.add_row(t("start_at_login" if sys.platform == "darwin" else "start_with_windows"), self.autostart)
+        privacy = QPushButton(t("privacy"), objectName="Link")
+        privacy.setCursor(Qt.PointingHandCursor)
+        privacy.clicked.connect(self._show_privacy)
+        sec.add_widget(privacy)
         lay.addWidget(sec)
 
         # data
@@ -749,7 +803,8 @@ class SettingsDialog(GlassDialog):
         self.usage_note.setText(bidi.plain(t.p("usage_note", ai.name), t.rtl))
         self.usage_note.setVisible(ai.reports_usage)
         self.saver_hint.setText(bidi.plain(t.p("saver_hint", ai.name), t.rtl))
-        if ai.reports_usage and not self.settings.api_key_mode(ai.name):
+        self.usage_sec.setVisible(not self.settings["no_ai"])
+        if ai.reports_usage and not self.settings.api_key_mode(ai.name) and not self.settings["no_ai"]:
             threading.Thread(target=lambda: self._limits_bridge.account.emit(
                 {"provider": ai.name, "limits": ai.read_limits()}), daemon=True).start()
 
@@ -772,8 +827,9 @@ class SettingsDialog(GlassDialog):
         ai = self._ai()
         if ai.name == "codex":
             self._show_models(ai.name, [(None, "")])
-            threading.Thread(target=lambda: self._models_bridge.account.emit(
-                {"provider": ai.name, "models": ai.models()}), daemon=True).start()
+            if not self.settings["no_ai"]:          # no AI yet: its CLI stays untouched
+                threading.Thread(target=lambda: self._models_bridge.account.emit(
+                    {"provider": ai.name, "models": ai.models()}), daemon=True).start()
         else:
             self._show_models(ai.name, ai.models())
 
@@ -833,9 +889,29 @@ class SettingsDialog(GlassDialog):
         self._refresh_account()
 
     def _refresh_account(self):
+        if self.settings["no_ai"]:          # skipped in onboarding: its CLI stays untouched until connected
+            self._set_account_text(self.t("ai_none"))
+            self.switch_btn.setText(self.t("ai_connect"))
+            self.switch_btn.show()
+            return
         ai = self._ai()
         threading.Thread(target=lambda: self._account_bridge.account.emit({**ai.account(), "provider": ai.name}),
                          daemon=True).start()
+
+    def _connect_ai(self):
+        """The onboarding's connect page (install, sign in or an API key), for a player who skipped it."""
+        if not Onboarding(self.settings, self.profiles, self.kb, self.stylesheet_fn, only_ai=True).exec():
+            return
+        for b in self.provider_pick.group.buttons():             # the provider may have changed there
+            b.setChecked(b.property("value") == self._ai().name)
+        self._fill_models()
+        self._label_usage()
+        self.account_changed.emit()       # the app's AI leaves the no-AI state
+        self._refresh_account()
+
+    def _show_privacy(self):
+        from .privacy import PrivacyDialog
+        PrivacyDialog(self.t.lang, self.stylesheet_fn(1.0)).exec()
 
     def _set_account_text(self, text: str):
         self.account_label.setText(bidi.plain(text, self.t.rtl))
@@ -875,6 +951,9 @@ class SettingsDialog(GlassDialog):
 
     def _switch_account(self):
         """Sign out, then run the official sign-in so another account can be chosen in the browser."""
+        if self.settings["no_ai"]:
+            self._connect_ai()
+            return
         self.switch_btn.setEnabled(False)
         self.logout_btn.hide()
         self._set_account_text(self.t("account_signing_out"))

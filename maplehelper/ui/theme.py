@@ -1,5 +1,6 @@
 """Liquid-glass look in two neutral appearances: light (white glass, dark text) and
-dark (black glass, white text). Maple orange is the only accent.
+dark (black glass, white text). Maple orange is the only accent. A third, high contrast,
+is opaque white with pure black text and borders, for players who need it.
 
 Tokens follow Apple's system colors (label / secondaryLabel / fills) for each appearance.
 """
@@ -23,7 +24,7 @@ PALETTES = {
         "text": "#F5F5F7", "muted": "rgba(235,235,245,0.64)", "faint": "rgba(235,235,245,0.40)",
         "fill1": "rgba(255,255,255,0.08)", "fill2": "rgba(255,255,255,0.12)", "fill3": "rgba(255,255,255,0.20)",
         "pressed": "rgba(255,255,255,0.28)", "stroke": "rgba(255,255,255,0.14)", "hair": "rgba(255,255,255,0.07)",
-        "scroll": "rgba(255,255,255,0.25)",
+        "scroll": "rgba(255,255,255,0.25)", "focus": "#0A84FF",
     },
     "light": {
         "glass": (242, 242, 247), "glass_alpha": 1.0, "solid_alpha": 1.0,
@@ -31,7 +32,16 @@ PALETTES = {
         "text": "#1D1D1F", "muted": "rgba(60,60,67,0.66)", "faint": "rgba(60,60,67,0.42)",
         "fill1": "#FFFFFF", "fill2": "#FFFFFF", "fill3": "#E5E5EA",
         "pressed": "rgba(230,230,235,0.95)", "stroke": "rgba(0,0,0,0.08)", "hair": "rgba(0,0,0,0.05)",
-        "scroll": "rgba(0,0,0,0.25)",
+        "scroll": "rgba(0,0,0,0.25)", "focus": "#007AFF",
+    },
+    # opaque, pure colors, 2px black edges: text 21:1, secondary text and the accent 8:1 or more on white
+    "contrast": {
+        "glass": (255, 255, 255), "glass_alpha": 1.0, "solid_alpha": 1.0,
+        "sheen": 0, "rim_top": 0, "rim": 0, "edge": "#000000",
+        "text": "#000000", "muted": "#333333", "faint": "#4A4A4A",
+        "fill1": "#FFFFFF", "fill2": "#FFFFFF", "fill3": "#E6E6E6",
+        "pressed": "#CCCCCC", "stroke": "#000000", "hair": "#000000",
+        "scroll": "#000000", "focus": "#0040C0", "accent": "#7A3300", "danger": "#A00000",
     },
 }
 MODE = "dark"
@@ -94,8 +104,48 @@ def stylesheet(font_family: str, size: int, opacity: float = 1.0) -> str:
     re-applying it (setStyleSheet repolishes every widget)."""
     key = (font_family, size, MODE, ICON_FONT)
     if key not in _CSS:
-        _CSS[key] = _stylesheet(font_family, size)
+        _CSS[key] = _stylesheet(font_family, size) + _access_css()
     return _CSS[key]
+
+
+FOCUS_TOOL_BUTTONS = ("Icon", "IconClose", "Send", "StepBtn", "Refresh")
+FOCUS_FRAMED = ("Secondary", "Quick", "Chip", "SubChip", "Select", "TagChip", "NowChip")    # have a border to color
+
+
+def _access_css() -> str:
+    """Keyboard focus rings in every look (ui/a11y.py marks buttons reached with Tab, so a click shows
+    none), and the high-contrast overrides: the shared rules above keep their place, these win by order."""
+    c, w = P(), 3 if MODE == "contrast" else 2
+    # an id rule sets their border: only an id selector outranks it
+    tools = ", ".join(f'QToolButton#{n}[keyfocus="true"]:focus' for n in FOCUS_TOOL_BUTTONS)
+    framed = ", ".join(f'QPushButton#{n}[keyfocus="true"]:focus' for n in FOCUS_FRAMED)
+    # Qt draws the outline as a focus rectangle around the label (as Windows does): no size change
+    css = f"""
+    QPushButton[keyfocus="true"]:focus {{ outline: {w}px solid {c['focus']}; }}
+    {tools} {{ border: {w}px solid {c['focus']}; }}
+    {framed} {{ border-color: {c['focus']}; outline: none; }}
+    """
+    if MODE != "contrast":
+        return css
+    a = c["accent"]
+    return css + f"""
+    #Group, #Card, #Tile, #TileGrid, #BubbleBot, #ProfileCard, #ShareCard, #Stepper, #JobFixed, #InfoNote, #FocusBar,
+    #Capsule, #Segmented, #ProfilePill, QPushButton#Secondary, QPushButton#Quick, QPushButton#Chip, QPushButton#SubChip,
+    QPushButton#Select, QPushButton#TagChip, QPushButton#NowChip, QLineEdit, QComboBox, QSpinBox, QTextBrowser#GuideText {{
+        border: 2px solid #000000; }}
+    QLineEdit:focus, #Capsule[focus="true"] {{ border: 3px solid {c['focus']}; }}
+    QPushButton#Primary, QToolButton#Send, #BubbleUser, QPushButton#Chip:checked {{ background: {a}; color: #FFFFFF; }}
+    QPushButton#Primary:pressed, QToolButton#Send:pressed {{ background: #000000; }}
+    QPushButton#Primary:disabled, QToolButton#Send:disabled {{ background: {c['fill3']}; color: {c['faint']}; }}
+    QPushButton#Quick:checked, QPushButton#SubChip:checked {{ background: #FFFFFF; border: 3px solid {a}; color: {a}; }}
+    QPushButton#NowChip {{ background: #FFFFFF; color: {a}; }}
+    QPushButton#Segment:checked {{ background: #000000; color: #FFFFFF; border: none; }}
+    QPushButton#Link, QPushButton#PlanLink:hover {{ color: {a}; text-decoration: underline; }}
+    QPushButton#LinkDanger {{ color: {c['danger']}; text-decoration: underline; }}
+    #Tag, #TagGood, #TagWarn, #TagAccent, #SaverBadge {{ color: #000000; background: #FFFFFF; border: 1px solid #000000; }}
+    #Check, #InfoIcon, #ShareBrand, QToolButton#StepBtn, QToolButton#Icon[wished="true"] {{ color: {a}; }}
+    QMenu::item:selected, QListWidget::item:selected {{ background: #000000; color: #FFFFFF; }}
+    """
 
 
 def apply(widget, css: str) -> None:
