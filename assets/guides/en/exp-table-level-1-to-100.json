@@ -1,6 +1,11 @@
 {
  "title": "EXP Table Lv 1-100: Current and Historical Reference",
  "intro": "EXP requirements for levels 1-100, with levels 1-49 confirmed in the current game and levels 50-99 marked as a historical reference.",
+ "tldr": [
+  "Classic uses the same EXP rates as pre-Big Bang MapleStory; levels 1-49 are confirmed in the current game, 50-99 are a historical reference.",
+  "The climb gets steep: level 99 alone costs more EXP than your first fifty levels put together.",
+  "Party bonus EXP caps at four members: +10% for two, +20% for three, +30% for four or more."
+ ],
  "hero": null,
  "minutes": 5,
  "blocks": [

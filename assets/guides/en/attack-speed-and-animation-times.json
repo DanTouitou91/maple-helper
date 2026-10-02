@@ -1,6 +1,11 @@
 {
  "title": "Attack Speed and Animation Times",
  "intro": "How weapon speed, skill animations, and Booster affect attack timing in MapleStory Classic World, including fixed mage timing and 30 ms cadence notes.",
+ "tldr": [
+  "Weapon speed comes in numbered tiers: Fast (4) finishes an ordinary attack 30 ms before Fast (5), so check the number, not just the name.",
+  "A matching Booster moves your weapon two tiers even at level 1; more levels only lower its cost and make it last longer.",
+  "Magician spells stay at Normal (6) speed with any weapon; the F/P and I/L Mage Spell Booster speeds up eligible spells instead."
+ ],
  "hero": null,
  "minutes": 5,
  "blocks": [

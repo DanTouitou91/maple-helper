@@ -536,10 +536,23 @@ class CharacterRow(QFrame):
         self.chosen.emit(self.cid)
 
 
-class EntityTile(Selectable, QFrame):
-    """Compact item tile for lists (drops, rewards): picture + official name. Tap to ask about it."""
+def drop_badge(source: str | None) -> QLabel | None:
+    """A drop's source: "✓ Classic" (players saw it drop in Classic) or a muted "MSEA ref" (the old MSEA table only)."""
+    if source not in ("classic", "msea"):
+        return None
+    from ..i18n import I18n
+    from . import terms
+    t = I18n(terms.LANG)
+    lb = QLabel(bidi.plain(t(f"drop_{source}"), t.rtl), objectName="TagGood" if source == "classic" else "Tag")
+    lb.setToolTip(t(f"drop_{source}_tip"))
+    return lb
 
-    def __init__(self, kb, key: str):
+
+class EntityTile(Selectable, QFrame):
+    """Compact item tile for lists (drops, rewards): picture + official name. Tap to ask about it.
+    source: where a monster's drop comes from ("classic" / "msea"), shown as a small badge."""
+
+    def __init__(self, kb, key: str, source: str | None = None):
         super().__init__(objectName="Tile")
         self._init_selectable(key)
         e = kb.get(key) or {}
@@ -558,7 +571,15 @@ class EntityTile(Selectable, QFrame):
         from PySide6.QtWidgets import QApplication
         rtl = QApplication.layoutDirection() == Qt.RightToLeft
         name.setAlignment((Qt.AlignRight if rtl else Qt.AlignLeft) | Qt.AlignAbsolute | Qt.AlignVCenter)
-        row.addWidget(name, 1)
+        badge = drop_badge(source)
+        if badge is None:
+            row.addWidget(name, 1)
+            return
+        col = QVBoxLayout()
+        col.setSpacing(3)
+        col.addWidget(name)
+        col.addWidget(badge, 0, (Qt.AlignRight if rtl else Qt.AlignLeft) | Qt.AlignAbsolute)
+        row.addLayout(col, 1)
 
 
 
@@ -623,7 +644,7 @@ class DropGroupCard(QFrame):
         grid = QGridLayout()
         grid.setSpacing(6)
         for i, k in enumerate(items):
-            grid.addWidget(EntityTile(kb, k), i // 2, i % 2)
+            grid.addWidget(EntityTile(kb, k, kb.drop_source(monster, k)), i // 2, i % 2)
         outer.addLayout(grid)
 
 

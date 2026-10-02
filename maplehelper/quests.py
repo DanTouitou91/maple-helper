@@ -142,3 +142,31 @@ def citizenship(kb, town: str, level: int, done: list[str] | None = None) -> lis
         if k not in done_set and q.area == "Citizenship" and q.level <= level and town_of(kb, q) == town:
             out.append(q)
     return sorted(out, key=lambda q: (-q.exp, q.level))
+
+
+# ------------------------------------------------------------------ the player's active quests
+
+def by_name(kb, name: str) -> Quest | None:
+    """An active quest as the chat recorded it (its name, or its key) -> the KB's quest."""
+    qs = all_quests(kb)
+    if name in qs:
+        return qs[name]
+    n = name.strip().lower()
+    return next((q for q in qs.values() if q.name.lower() == n), None)
+
+
+def turn_in(kb, key: str) -> tuple[str, str]:
+    """(NPC who takes the quest back, where they stand) from the quest page; ("", "") when it doesn't say."""
+    page = kb.page(key)
+    m = re.search(r"Turn in: ([^·\n]+)", page)
+    npc = m.group(1).strip() if m else ""
+    where = re.search(rf"\nTurn in {re.escape(npc)} (.+)", page) if npc else None
+    return npc, (where.group(1).split(" › ")[-1].strip() if where else "")
+
+
+def need_parts(need: str) -> tuple[str, str, int]:
+    """ "Defeat Blue Snail x 10" -> ("monster", "Blue Snail", 10); "Pig's Head x 10" -> ("item", "Pig's Head", 10)."""
+    m = re.fullmatch(r"(Defeat |Collect )?(.+?) x ([\d,]+)", need.strip())
+    if not m:
+        return "", need.strip(), 0
+    return ("monster" if m.group(1) == "Defeat " else "item"), m.group(2), int(m.group(3).replace(",", ""))

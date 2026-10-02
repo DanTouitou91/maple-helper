@@ -661,6 +661,9 @@ class SettingsDialog(GlassDialog):
 
         # data
         sec = Section(t("sec_data"), rtl)
+        from ..updater import freshness
+        if fresh := freshness(t):                 # "Game data updated 3 days ago"
+            sec.add_row(fresh)
         upd = QPushButton(t("update_kb"), objectName="Link")
         upd.setCursor(Qt.PointingHandCursor)
         upd.clicked.connect(self.update_kb_requested.emit)

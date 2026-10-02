@@ -1,6 +1,11 @@
 {
  "title": "MapleStory Classic Cleric Build and Leveling Guide: Lv 30-70",
  "intro": "Clerics heal their party, buff Accuracy with Bless, and fire Holy Arrow at mobs. Max Holy Arrow first for your regular attack, or start with Heal for early healing and undead training.",
+ "tldr": [
+  "Clerics are the tankiest class at level 70 but deal the lowest damage. They heal the party, and Bless gives up to 20 Accuracy and 20 Evasion.",
+  "Max Holy Arrow first for your regular attack, or start with Heal for early healing and undead training.",
+  "Advance at level 30 with Grendel the Really Old in Ellinia; Kerning City citizenship is recommended from 30 to 70."
+ ],
  "hero": null,
  "minutes": null,
  "blocks": [

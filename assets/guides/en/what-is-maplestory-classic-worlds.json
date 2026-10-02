@@ -1,6 +1,11 @@
 {
  "title": "What is MapleStory Classic World?",
  "intro": "MapleStory Classic World is Nexon's new world built around early MapleStory, with slower leveling, manual builds, scroll-based gear, and original content.",
+ "tldr": [
+  "Nexon's separate world built around early MapleStory: manual AP and SP, scroll-based gear, slower leveling and its own economy.",
+  "Characters, items and IGNs stay apart from modern MapleStory; your NX balance is the only thing the two share.",
+  "It adds content old MapleStory never had: the Forgotten Hollow area for levels 39-60 and six crafting professions."
+ ],
  "hero": null,
  "minutes": 7,
  "blocks": [

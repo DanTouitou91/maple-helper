@@ -95,14 +95,15 @@ def write_drops(kb: Path) -> None:
     KnowledgeBase(kb).ensure_drop_table()
 
 
-def _drops(kb: Path) -> dict[str, dict[str, str]]:
-    """monster key -> {item key: item name}"""
-    out: dict[str, dict[str, str]] = {}
+def _drops(kb: Path) -> dict[str, dict[str, tuple[str, str]]]:
+    """monster key -> {item key: (item name, source)}; source is "" in a table from before the column existed."""
+    out: dict[str, dict[str, tuple[str, str]]] = {}
     try:
         with open(kb / "drops.tsv", encoding="utf-8", newline="") as f:
             for r in csv.DictReader(f, delimiter="	"):
                 if r.get("monster_key") and r.get("item_key"):
-                    out.setdefault(r["monster_key"], {})[r["item_key"]] = r.get("item") or r["item_key"]
+                    out.setdefault(r["monster_key"], {})[r["item_key"]] = (r.get("item") or r["item_key"],
+                                                                           r.get("source") or "")
     except OSError:
         pass
     return out
@@ -124,10 +125,12 @@ def diff_kb(old: Path, new: Path) -> dict:
         pa, pb = a[k].get("props") or {}, b[k].get("props") or {}
         props = [[f, pa.get(f), pb.get(f)] for f in sorted(pa.keys() | pb.keys()) if pa.get(f) != pb.get(f)]
         oa, ob = da.get(k, {}), db.get(k, {})
-        drops_added = sorted(ob[i] for i in ob.keys() - oa.keys())
-        drops_removed = sorted(oa[i] for i in oa.keys() - ob.keys())
+        drops_added = sorted(ob[i][0] for i in ob.keys() - oa.keys())
+        drops_removed = sorted(oa[i][0] for i in oa.keys() - ob.keys())
+        # an MSEA reference drop that Classic players have now seen drop
+        drops_confirmed = sorted(ob[i][0] for i in oa.keys() & ob.keys() if (oa[i][1], ob[i][1]) == ("msea", "classic"))
         renamed = a[k].get("name") != b[k].get("name")
-        if props or drops_added or drops_removed or renamed:
+        if props or drops_added or drops_removed or drops_confirmed or renamed:
             c = _brief(b[k])
             if renamed:
                 c["old_name"] = a[k].get("name")
@@ -137,6 +140,8 @@ def diff_kb(old: Path, new: Path) -> dict:
                 c["drops_added"] = drops_added
             if drops_removed:
                 c["drops_removed"] = drops_removed
+            if drops_confirmed:
+                c["drops_confirmed"] = drops_confirmed
             changed.append(c)
         elif a[k].get("hash") != b[k].get("hash"):
             updated.append(_brief(b[k]))

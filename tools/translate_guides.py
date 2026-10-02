@@ -15,6 +15,9 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "tools"))
+from build_guides import keep_tldr  # noqa: E402
+
 GUIDES = ROOT / "assets" / "guides"
 _ICON = re.compile(r"\[\[img:[^\]]+\]\]")
 TEXT_KEYS = ("h2", "h3", "p", "note", "ul", "ol", "table", "cap", "text")
@@ -26,7 +29,7 @@ def needs_words(s: str) -> bool:
 
 def strings(guide: dict) -> list[str]:
     """Every translatable string of a guide, in reading order."""
-    out = [guide.get("title", ""), guide.get("intro", "")]
+    out = [guide.get("title", ""), guide.get("intro", ""), *guide.get("tldr", [])]
     for b in guide.get("blocks", []):
         for k in TEXT_KEYS:
             v = b.get(k)
@@ -55,7 +58,10 @@ def translate(guide: dict, tr: dict[str, str]) -> dict:
             elif isinstance(v, list):
                 nb[k] = [t(x) for x in v]
         blocks.append(nb)
-    return {"title": t(guide.get("title", "")), "intro": t(guide.get("intro", "")), "blocks": blocks}
+    out = {"title": t(guide.get("title", "")), "intro": t(guide.get("intro", ""))}
+    if guide.get("tldr"):
+        out["tldr"] = [t(x) for x in guide["tldr"]]
+    return {**out, "blocks": blocks}
 
 
 def export(lang: str, out_dir: Path) -> None:
@@ -84,7 +90,10 @@ def import_(lang: str, in_dir: Path) -> None:
         src = src or {str(i): s for i, s in enumerate(dict.fromkeys(strings(en)))}
         tr = {src[i]: v for i, v in done.items() if i in src and isinstance(v, str) and v.strip()}
         missing = [i for i in src if i not in done]
-        out = {**translate(en, tr), "source_hash": en["hash"]}
+        new = translate(en, tr)
+        if new.get("tldr") == en.get("tldr"):
+            new.pop("tldr", None)          # the key points weren't translated: keep the current ones
+        out = keep_tldr({**new, "source_hash": en["hash"]}, GUIDES / lang / f.name)
         (GUIDES / lang).mkdir(exist_ok=True)
         (GUIDES / lang / f.name).write_text(json.dumps(out, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
         print(f.stem, f"{len(tr)} translated", f"{len(missing)} missing" if missing else "")

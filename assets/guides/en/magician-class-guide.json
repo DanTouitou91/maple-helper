@@ -1,6 +1,11 @@
 {
  "title": "MapleStory Classic Magician Build and Leveling Guide: Lv 1-30",
  "intro": "Magicians train under Grendel the Really Old in Ellinia. They fight with ranged attacks, spend MP on nearly everything, and can choose between cheaper training and stronger emergency protection.",
+ "tldr": [
+  "Advance with Grendel the Really Old in Ellinia at level 10, with no stat requirement: start with 4 STR / 4 DEX / 12 INT / 5 LUK and put every AP into INT.",
+  "INT is both your main damage stat and your best AP source of Accuracy, and every miss still costs MP.",
+  "Energy Bolt reaches 350 px and is very MP efficient, but first job has no mobbing skill and MP potions cost twice as much as HP potions per point."
+ ],
  "hero": "c39490d54e4a2c.png",
  "minutes": null,
  "blocks": [

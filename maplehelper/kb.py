@@ -187,21 +187,35 @@ class KnowledgeBase:
 
     def monster_drops(self, key: str) -> list[str]:
         """Item keys a monster drops, read from its page (confirmed Classic drops + MSEA reference list)."""
+        return list(self.drop_sources(key))
+
+    def drop_sources(self, key: str) -> dict[str, str]:
+        """item key -> "classic" (players saw it drop in Classic) or "msea" (only the old MSEA table), page order."""
+        cache = self.__dict__.setdefault("_drop_sources", {})
+        if key in cache:
+            return cache[key]
         body = self.page(key)
         i = body.find("Drops (MS Classic)")
-        if i < 0:
-            return []
-        end = len(body)
-        for marker in ("Associated Quests", "Map Locations"):
-            j = body.find(marker, i)
-            if 0 < j < end:
-                end = j
-        found = []
-        for line in body[i:end].split("\n"):
-            k = self._item_by_name.get(line.strip().lower())
-            if k and k not in found:
-                found.append(k)
+        found: dict[str, str] = {}
+        if i >= 0:
+            end = len(body)
+            for marker in ("Associated Quests", "Map Locations"):
+                j = body.find(marker, i)
+                if 0 < j < end:
+                    end = j
+            ref = body.find("MSEA reference drops", i, end)       # the confirmed list sits above this heading
+            ref = end if ref < 0 else ref
+            at = i
+            for line in body[i:end].split("\n"):
+                k = self._item_by_name.get(line.strip().lower())
+                if k and k not in found:
+                    found[k] = "classic" if at < ref else "msea"
+                at += len(line) + 1
+        cache[key] = found
         return found
+
+    def drop_source(self, monster: str, item: str) -> str | None:
+        return self.drop_sources(monster).get(item)
 
     @cached_property
     def droppers(self) -> dict[str, list[str]]:
@@ -244,13 +258,15 @@ class KnowledgeBase:
         try:
             if path.exists() and idx.exists() and path.stat().st_mtime >= idx.stat().st_mtime:
                 return
-            lines = ["monster\tmonster_level\tmonster_key\titem\titem_type\titem_key"]
+            # source: "classic" = confirmed by Classic players, "msea" = the MSEA reference list only
+            lines = ["monster\tmonster_level\tmonster_key\titem\titem_type\titem_key\tsource"]
             for ikey, monsters in self.droppers.items():
                 it = self.get(ikey)
                 for m in monsters:
                     me = self.get(m)
                     lv = (me.get("props") or {}).get("Level", "")
-                    lines.append(f"{me['name']}\t{lv}\t{m}\t{it['name']}\t{it.get('type') or ''}\t{ikey}")
+                    lines.append(f"{me['name']}\t{lv}\t{m}\t{it['name']}\t{it.get('type') or ''}\t{ikey}"
+                                 f"\t{self.drop_source(m, ikey)}")
             tmp = path.with_suffix(".tmp")       # Claude may grep it meanwhile: never a half-written table
             tmp.write_text("\n".join(lines), encoding="utf-8")
             tmp.replace(path)
@@ -262,8 +278,11 @@ class KnowledgeBase:
         if not drops:
             return ""
         e = self.get(key)
-        names = ", ".join(f"{self.get(k)['name']} [{k}]" for k in drops)
-        return f"Drops of {e['name']} (MSEA reference list; names and keys exactly as in the game): {names}"
+        src = self.drop_sources(key)
+        names = ", ".join(f"{self.get(k)['name']} [{k}]" + (" (confirmed in Classic)" if src[k] == "classic" else "")
+                          for k in drops)
+        return (f"Drops of {e['name']} (MSEA reference list unless marked confirmed in Classic; "
+                f"names and keys exactly as in the game): {names}")
 
     # ------------------------------------------------------------ level digest
 

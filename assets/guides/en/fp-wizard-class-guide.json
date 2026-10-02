@@ -1,6 +1,11 @@
 {
  "title": "MapleStory Classic F/P Wizard Build and Leveling Guide: Lv 30-70",
  "intro": "Fire/Poison Wizards' Fire Arrow burns down a target while poison spamming an entire map. They are the masters of damage over time effects.",
+ "tldr": [
+  "F/P Wizards are the masters of damage over time: Fire Arrow burns down one target while Poison Breath poisons a whole map.",
+  "Fire Arrow deals 25% more damage to fire-weak mobs and 25% less to fire-resistant ones; max Poison Breath costs 40 MP per cast.",
+  "The first second-job SP goes into Teleport (55 MP at level 1), and Meditation gives nearby party members 25 Magic Attack."
+ ],
  "hero": "c6c16edcf9315e.png",
  "minutes": null,
  "blocks": [

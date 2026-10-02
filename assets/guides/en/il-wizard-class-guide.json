@@ -1,6 +1,11 @@
 {
  "title": "MapleStory Classic I/L Wizard Build and Leveling Guide: Lv 30-70",
  "intro": "Ice/Lightning Wizards are the fastest mobbing class, with Thunder Bolt hitting up to six nearby mobs. Cold Beam handles tougher targets and can hit through terrain, and Teleport keeps you moving between platforms.",
+ "tldr": [
+  "I/L Wizards are the fastest mobbing class: Thunder Bolt is the only second-job attack that hits up to six mobs.",
+  "Cold Beam handles tougher targets, deals 25% more damage to ice-weak mobs and slows them; max Thunder Bolt costs 40 MP per cast.",
+  "The first second-job SP goes into Teleport, and keep Kerning City citizenship for its robe scrolls."
+ ],
  "hero": "a8b552bf0d96ac.png",
  "minutes": null,
  "blocks": [

@@ -15,13 +15,14 @@ from PySide6.QtGui import QIcon, QPixmap, QStandardItem, QStandardItemModel
 from PySide6.QtWidgets import (QButtonGroup, QCompleter, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
                                QPushButton, QScrollArea, QStackedWidget, QTextBrowser, QVBoxLayout, QWidget)
 
-from .. import bidi, buildplan, combat, crafting, glossary, guides, market, plan, quests
+from .. import bidi, buildplan, combat, crafting, glossary, guides, market, plan, progress, quests, updater, wishlist
 from ..i18n import I18n
 from . import terms, theme
 from .controls import Section, Segmented, Stepper, rtl_buttons
 from .glass import GlassDialog
 
-PAGES = ("train", "calc", "build", "quests", "crafting", "town", "prices", "exp", "more")
+PAGES = ("train", "calc", "build", "quests", "crafting", "town", "prices", "exp", "progress", "more")
+NAV_COLUMNS = 5
 MAX_QUESTS = 40
 CURRENT_ROW = {"light": "#FFD3A3", "dark": "#7A4615"}     # the build table row for the player's level
 
@@ -201,6 +202,62 @@ def map_rows(kb) -> list[tuple[str, str, object]]:
     return [r[2] for r in rows]
 
 
+class LevelChart(QWidget):
+    """Level (with the EXP bar's fraction) over time: one orange line on a light grid of whole levels."""
+
+    def __init__(self):
+        super().__init__()
+        self.setMinimumHeight(170)
+        self.points: list[tuple[float, float]] = []
+
+    def set_points(self, points: list[tuple[float, float]]):
+        self.points = points
+        self.update()
+
+    def paintEvent(self, e):
+        from PySide6.QtCore import QPointF, QRectF
+        from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
+        if len(self.points) < 2:
+            return
+
+        def color(css: str) -> QColor:          # the theme's tokens are CSS: "rgba(0,0,0,0.08)"
+            m = re.fullmatch(r"rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)", css)
+            return QColor(int(m[1]), int(m[2]), int(m[3]), round(float(m[4]) * 255)) if m else QColor(css)
+        c = theme.P()
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        f = p.font()
+        f.setPixelSize(11)
+        p.setFont(f)
+        left, top, right, bottom = 34, 8, self.width() - 10, self.height() - 22
+        t0, t1 = self.points[0][0], max(self.points[-1][0], self.points[0][0] + 1)
+        lo = math.floor(min(v for _, v in self.points))
+        hi = max(math.ceil(max(v for _, v in self.points)), lo + 1)
+        step = max(1, math.ceil((hi - lo) / 5))
+
+        def at(t, v):
+            return QPointF(left + (t - t0) / (t1 - t0) * (right - left), bottom - (v - lo) / (hi - lo) * (bottom - top))
+        for lv in range(lo, hi + 1, step):
+            y = at(t0, lv).y()
+            p.setPen(QPen(color(c["stroke"]), 1))
+            p.drawLine(QPointF(left, y), QPointF(right, y))
+            p.setPen(color(c["muted"]))
+            p.drawText(QRectF(0, y - 8, left - 6, 16), Qt.AlignRight | Qt.AlignAbsolute | Qt.AlignVCenter, str(lv))
+        for t, align in ((t0, Qt.AlignLeft), (t1, Qt.AlignRight)):         # time runs left to right in Hebrew too
+            p.drawText(QRectF(left, bottom + 4, right - left, 16), align | Qt.AlignAbsolute | Qt.AlignTop,
+                       time.strftime("%d/%m", time.localtime(t)))
+        path = QPainterPath(at(*self.points[0]))
+        for pt in self.points[1:]:
+            path.lineTo(at(*pt))
+        p.setPen(QPen(QColor(theme.ORANGE), 2.2, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        p.setBrush(Qt.NoBrush)
+        p.drawPath(path)
+        p.setBrush(QColor(theme.ORANGE_DEEP))
+        p.setPen(Qt.NoPen)
+        p.drawEllipse(at(*self.points[-1]), 3.5, 3.5)            # where you are now
+        p.end()
+
+
 class ToolsDialog(GlassDialog):
     sync_requested = Signal()                 # read level/EXP/stats from a screenshot (the chat does it)
     market_ready = Signal(object)             # (item name, Market or None) from the background lookup
@@ -218,7 +275,7 @@ class ToolsDialog(GlassDialog):
         outer = QVBoxLayout(self.content)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(10)
-        # the pages as chips, three rows of three so every label stays readable
+        # the pages as chips, two rows of five so every label stays readable
         grid = QGridLayout()
         grid.setHorizontalSpacing(6)
         grid.setVerticalSpacing(6)
@@ -229,11 +286,14 @@ class ToolsDialog(GlassDialog):
             b.setCursor(Qt.PointingHandCursor)
             b.setProperty("page", name)
             self.nav.addButton(b, i)
-            grid.addWidget(b, i // 3, i % 3)
+            grid.addWidget(b, i // NAV_COLUMNS, i % NAV_COLUMNS)
         self.nav.idClicked.connect(self.show_page)
         outer.addLayout(grid)
         self.stack = QStackedWidget()
         outer.addWidget(self.stack, 1)
+        fresh = QLabel(self._p(updater.freshness(t, getattr(kb, "root", None))), objectName="RowHint")
+        fresh.setAlignment(Qt.AlignHCenter)
+        outer.addWidget(fresh)
         self.pages = {}
         for _ in PAGES:
             self.stack.addWidget(QWidget())        # a page is built the first time it opens
@@ -659,7 +719,7 @@ class ToolsDialog(GlassDialog):
     def _page_quests(self):
         t = self.t
         sc, lay = scroll_page()
-        self.q_mode = Segmented([(t("q_now"), "now"), (t("q_soon"), "soon")], "now", t.rtl)
+        self.q_mode = Segmented([(t("q_now"), "now"), (t("q_soon"), "soon"), (t("q_mine"), "mine")], "now", t.rtl)
         self.q_mode.changed.connect(lambda *_: self._fill_quests())
         lay.addWidget(self.q_mode, 0, Qt.AlignHCenter)
         self.q_head = self._label("", "ToolHeader")
@@ -677,8 +737,11 @@ class ToolsDialog(GlassDialog):
             self.q_head.setText("")
             self._no_character(self.q_list)
             return
-        r = quests.for_level(self.kb, c.level, c.base_class, c.job, c.quests_done)
         mode = self.q_mode.value()
+        if mode == "mine":
+            self._fill_my_quests()
+            return
+        r = quests.for_level(self.kb, c.level, c.base_class, c.job, c.quests_done)
         rows = r[mode]
         self._set(self.q_head, t(f"q_head_{mode}", n=len(rows), lv=c.level) +
                   ("\n" + t("q_done_count", n=r["done"]) if r["done"] else ""))
@@ -764,6 +827,12 @@ class ToolsDialog(GlassDialog):
         done.setCursor(Qt.PointingHandCursor)
         done.clicked.connect(lambda _=False, k=q.key: self._quest_done(k))
         acts.addWidget(done)
+        tracked = bool(self.c and q.name in self.c.active_quests)
+        track = QPushButton(self._p(t("q_tracking" if tracked else "q_track")), objectName="Secondary")
+        track.setEnabled(not tracked)
+        track.setCursor(Qt.PointingHandCursor)
+        track.clicked.connect(lambda _=False, n=q.name: (self.profiles.track_quest(n), self.refresh()))
+        acts.addWidget(track)
         ask = QPushButton(self._p(t("ask_short")), objectName="Link")
         ask.setCursor(Qt.PointingHandCursor)
         ask.clicked.connect(lambda _=False, k=q.key: self.tag_requested.emit(k))
@@ -778,6 +847,118 @@ class ToolsDialog(GlassDialog):
             c.quests_done.append(key)
             self.profiles.save()
         self.refresh()
+
+    # my quests (the ones the player took: from the chat, or "Track") ----
+
+    def _fill_my_quests(self):
+        t, c = self.t, self.c
+        names = list(c.active_quests)
+        self._set(self.q_head, t("q_mine_head", n=len(names)) if names else "")
+        if not names:
+            self.q_list.addWidget(self._label(t("q_mine_empty"), "RowHint"))
+        for name in names[:MAX_QUESTS]:
+            self.q_list.addWidget(self._my_quest_card(name))
+
+    def _monster_named(self, name: str) -> combat.Monster | None:
+        """The version of a monster that spawns on the most maps."""
+        n = name.strip().lower()
+        found = [m for m in combat.monsters(self.kb) if m.name.lower() == n]
+        return max(found, key=lambda m: sum(k for _, k in m.maps)) if found else None
+
+    def _need_hint(self, need: str) -> str:
+        """Where a requirement comes from: the monsters that drop the item (links), or where the monster lives."""
+        kind, name, _ = quests.need_parts(need)
+        colors = {"classic": "#2E9E5B", "msea": theme.P()["muted"]}        # the badges' colors (#TagGood, #Tag)
+        if kind == "monster":
+            m = self._monster_named(name)
+            return html.escape(self.t("q_found_in", map=m.maps[0][0])) if m and m.maps else ""
+        key = self.kb._item_by_name.get(name.lower())
+        mobs = []
+        for mk in self.kb.droppers.get(key, [])[:3] if key else []:
+            e = self.kb.get(mk) or {}
+            lv = (e.get("props") or {}).get("Level")
+            src = self.kb.drop_source(mk, key)
+            mobs.append(f"<a href='{mk}' style='color: {theme.ORANGE_DEEP}; text-decoration: none;'>"
+                        f"{html.escape(e.get('name', mk))}</a>" + (f" Lv. {lv}" if lv else "")
+                        + (f" <span style='color: {colors[src]};'>({html.escape(self.t('drop_' + src))})</span>" if src else ""))
+        if not mobs:
+            return ""
+        return html.escape(self.t("q_drops_from", mobs="{mobs}")).replace("{mobs}", f"{bidi.LRE}{', '.join(mobs)}{bidi.PDF}")
+
+    def _my_quest_card(self, name: str) -> QFrame:
+        t, c = self.t, self.c
+        q = quests.by_name(self.kb, name)
+        card = QFrame(objectName="Card")
+        outer = QHBoxLayout(card)
+        outer.setContentsMargins(12, 10, 12, 10)
+        outer.setSpacing(12)
+        npc_name, where = quests.turn_in(self.kb, q.key) if q else ("", "")
+        npc_name = npc_name or (q.npc if q else "")
+        pic = QLabel()
+        pic.setFixedSize(52, 60)
+        pic.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
+        uri = self._picture_uri("npc", npc_name) if npc_name else None
+        if uri:
+            pic.setPixmap(theme.thumb(QUrl(uri).toLocalFile(), 52, 60))
+        outer.addWidget(pic, 0, Qt.AlignTop)
+        col = QVBoxLayout()
+        col.setSpacing(4)
+        outer.addLayout(col, 1)
+        top = QHBoxLayout()
+        title = QLabel(self._p(q.name if q else name), objectName="CardName")
+        title.setWordWrap(True)
+        top.addWidget(title, 1)
+        if q:
+            top.addWidget(tag(self._p(t("lv_short", n=q.level)), "Tag"))
+        col.addLayout(top)
+        if npc_name:
+            col.addWidget(self._label(t("q_turn_in_at", npc=npc_name, where=where) if where else
+                                      t("q_turn_in", npc=npc_name), "CardSub"))
+        if not q:
+            col.addWidget(self._label(t("q_unknown"), "RowHint"))
+        ticked = set((c.quest_ticks or {}).get(name, []))
+        side = (Qt.AlignRight if t.rtl else Qt.AlignLeft) | Qt.AlignAbsolute
+        for need in (q.needs if q else [])[:6]:
+            line = QHBoxLayout()
+            line.setSpacing(8)
+            box = QPushButton("✓" if need in ticked else "", objectName="SubChip")
+            box.setCheckable(True)
+            box.setChecked(need in ticked)
+            box.setFixedSize(26, 26)
+            box.setStyleSheet("padding: 0;")             # a chip's side padding leaves no room for the ✓
+            box.setCursor(Qt.PointingHandCursor)
+            box.toggled.connect(lambda on, n=need, b=box: (b.setText("✓" if on else ""),
+                                                           self.profiles.tick_quest(name, n, on)))
+            line.addWidget(box, 0, Qt.AlignTop)
+            things = QVBoxLayout()
+            things.setSpacing(1)
+            d = "dir='rtl' align='right'" if t.rtl else "dir='ltr' align='left'"
+            what = QLabel(f"<p {d} style='margin:0'>{self._thing_html(need)}</p>", objectName="CardSub")
+            what.setTextFormat(Qt.RichText)
+            things.addWidget(what)
+            hint = self._need_hint(need)
+            if hint:
+                lb = QLabel(f"<p {d} style='margin:0'>{hint}</p>", objectName="RowHint")
+                lb.setTextFormat(Qt.RichText)
+                lb.setWordWrap(True)
+                lb.setAlignment(side)
+                lb.linkActivated.connect(self.tag_requested.emit)
+                things.addWidget(lb)
+            line.addLayout(things, 1)
+            col.addLayout(line)
+        acts = QHBoxLayout()
+        done = QPushButton(self._p(t("q_mark_done")), objectName="Secondary")
+        done.setCursor(Qt.PointingHandCursor)
+        done.clicked.connect(lambda _=False: (self.profiles.complete_quest(name, q.key if q else None), self.refresh()))
+        acts.addWidget(done)
+        if q:
+            ask = QPushButton(self._p(t("ask_short")), objectName="Link")
+            ask.setCursor(Qt.PointingHandCursor)
+            ask.clicked.connect(lambda _=False, k=q.key: self.tag_requested.emit(k))
+            acts.addWidget(ask)
+        acts.addStretch(1)
+        col.addLayout(acts)
+        return card
 
     # crafting ------------------------------------------------------------
 
@@ -1146,6 +1327,184 @@ class ToolsDialog(GlassDialog):
             self._set(self.exp_status, t("exp_no_gain"))
         else:
             self._set(self.exp_status, t("exp_idle"))
+
+    # progress: level over time, the pace, and goals ---------------------
+
+    def _page_progress(self):
+        t = self.t
+        sc, lay = scroll_page()
+        chart = Section(t("prog_chart_head"), t.rtl)
+        self.prog_chart = LevelChart()
+        chart.add_widget(self.prog_chart)
+        self.prog_empty = self._label(t("prog_empty"), "RowHint")
+        chart.add_widget(self.prog_empty)
+        lay.addWidget(chart)
+        pace = Section(t("prog_pace_head"), t.rtl)
+        nums = QHBoxLayout()
+        self.prog_cells = {}
+        for key in ("per_hour", "next"):
+            box = self._big("–", self._p(t("prog_per_hour")), explain=False)
+            nums.addLayout(box)
+            self.prog_cells[key] = (box.itemAt(0).widget(), box.itemAt(1).widget())
+        holder = QWidget()
+        holder.setLayout(nums)
+        pace.add_widget(holder)
+        self.prog_forecast = self._label("", "RowLabel")
+        pace.add_widget(self.prog_forecast)
+        lay.addWidget(pace)
+        goals = Section(t("goals_head"), t.rtl)
+        add = QHBoxLayout()
+        self.goal_level = Stepper(2, 200, 30)
+        self.goal_level.edit.setFixedWidth(52)
+        add.addWidget(self.goal_level)
+        go = QPushButton(self._p(t("goal_add")), objectName="Secondary")
+        go.setCursor(Qt.PointingHandCursor)
+        go.clicked.connect(lambda: (self.profiles.add_goal(self.goal_level.value()), self.refresh()))
+        add.addWidget(go)
+        holder2 = QWidget()
+        holder2.setLayout(add)
+        self._row(goals, t("goal_add_level"), holder2)
+        self.goal_item = EntityPicker(item_rows(self.kb), self._p(t("goal_item_ph")), icon=32)
+        self.goal_item.picked.connect(self._add_item_goal)
+        goals.add_widget(self.goal_item)
+        goals.add_widget(self._label(t("goal_item_hint"), "RowHint"))
+        lay.addWidget(goals)
+        self.goal_list = QVBoxLayout()
+        self.goal_list.setSpacing(8)
+        lay.addLayout(self.goal_list)
+        lay.addStretch(1)
+        return sc
+
+    def _pace(self, samples: list) -> tuple[float | None, str]:
+        """EXP per hour: this session's EXP meter when it measured, else the logged readings."""
+        r = (self.meter.get(self.c.id) or {}).get("result") or {}
+        if r.get("per_hour"):
+            return r["per_hour"], self.t("prog_from_meter", n=round(r["minutes"]))
+        per_hour = progress.exp_per_hour(self.kb, samples)
+        return per_hour, self.t("prog_from_log") if per_hour else ""
+
+    def _fill_progress(self):
+        t, c = self.t, self.c
+        clear(self.goal_list)
+        if not c:
+            self.prog_chart.hide()
+            self.prog_empty.show()
+            self._set(self.prog_empty, t("tool_no_char"))
+            self.prog_forecast.setText("")
+            return
+        self.goal_level.setValue(max(self.goal_level.value(), c.level + 1))      # a goal is a level ahead
+        from ..store import ProgressLog
+        samples = ProgressLog(c.id).samples()
+        points = progress.points(samples)
+        self.prog_chart.set_points(points)
+        self.prog_chart.setVisible(len(points) >= 2)
+        self.prog_empty.setVisible(len(points) < 2)
+        self._set(self.prog_empty, t("prog_empty"))
+        per_hour, source = self._pace(samples)
+        nxt = progress.hours_to(self.kb, c.level, c.exp_pct, c.level + 1, per_hour)
+        (v1, _), (v2, l2) = self.prog_cells["per_hour"], self.prog_cells["next"]
+        v1.setText(f"{round(per_hour):,}" if per_hour else "–")
+        v2.setText(progress.duration(t, nxt) if nxt is not None else "–")
+        l2.setText(self._p(t("prog_to_level", n=c.level + 1)))
+        if nxt is not None:
+            self._set(self.prog_forecast, t("prog_forecast", n=c.level + 1, time=progress.duration(t, nxt)) + "\n" + source)
+        elif per_hour:
+            self._set(self.prog_forecast, t("prog_no_table"))
+        else:
+            self._set(self.prog_forecast, t("prog_no_pace"))
+        for g in sorted(c.goals, key=lambda g: (bool(g.get("done")), g.get("level", 0))):
+            self.goal_list.addWidget(self._level_goal_card(g, per_hour))
+        for key in wishlist.items(self.settings, c.id):
+            if self.kb.get(key):
+                self.goal_list.addWidget(self._item_goal_card(key))
+        if not self.goal_list.count():
+            self.goal_list.addWidget(self._label(t("goals_empty"), "RowHint"))
+
+    def _goal_card(self, path, title: str, done: bool) -> tuple[QFrame, QVBoxLayout, QHBoxLayout]:
+        """A goal's card: (picture), title, ✓ when reached; the caller fills the column and the actions."""
+        card = QFrame(objectName="Card")
+        outer = QHBoxLayout(card)
+        outer.setContentsMargins(12, 10, 12, 10)
+        outer.setSpacing(12)
+        if path:
+            pic = QLabel()
+            pic.setFixedSize(44, 44)
+            pic.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
+            pic.setPixmap(theme.thumb(path, 44))
+            outer.addWidget(pic, 0, Qt.AlignTop)
+        col = QVBoxLayout()
+        col.setSpacing(4)
+        outer.addLayout(col, 1)
+        top = QHBoxLayout()
+        name = QLabel(self._p(title), objectName="CardName")
+        name.setWordWrap(True)
+        top.addWidget(name, 1)
+        if done:
+            top.addWidget(tag(self._p(self.t("goal_done")), "TagGood"))
+        col.addLayout(top)
+        acts = QHBoxLayout()
+        col.addLayout(acts)
+        return card, col, acts
+
+    def _level_goal_card(self, g: dict, per_hour: float | None) -> QFrame:
+        t, c = self.t, self.c
+        n = g["level"]
+        card, col, acts = self._goal_card(None, t("goal_level", n=n), bool(g.get("done")))
+        if not g.get("done"):
+            col.insertWidget(1, self._label(t("goal_level_now", lv=c.level, left=n - c.level), "CardSub"))
+            eta = progress.hours_to(self.kb, c.level, c.exp_pct, n, per_hour)
+            if eta is not None:
+                col.insertWidget(2, self._label(t("goal_eta", time=progress.duration(t, eta)), "RowHint"))
+        drop = QPushButton(self._p(t("goal_remove")), objectName="Link")
+        drop.setCursor(Qt.PointingHandCursor)
+        drop.clicked.connect(lambda: (self.profiles.remove_goal(n), self.refresh()))
+        acts.addWidget(drop)
+        acts.addStretch(1)
+        return card
+
+    def _item_goal_card(self, key: str) -> QFrame:
+        """A wished item as a goal: who drops it (tap one to ask about it in the chat), and "Got it"."""
+        from .widgets import drop_badge
+        t = self.t
+        card, col, acts = self._goal_card(self.kb.picture(key), self.kb.get(key)["name"], False)
+        droppers = self.kb.droppers.get(key, [])
+        at = 1
+        col.insertWidget(at, self._label(t("wish_dropped_by") if droppers else t("wish_no_droppers"), "RowHint"))
+        for m in droppers[:3]:
+            e = self.kb.get(m) or {}
+            lv = (e.get("props") or {}).get("Level")
+            row = QHBoxLayout()
+            row.setSpacing(6)
+            link = QPushButton(f"{bidi.LRE}{e.get('name', m)}" + (f" · Lv. {lv}" if lv else "") + bidi.PDF, objectName="Link")
+            link.setCursor(Qt.PointingHandCursor)
+            link.clicked.connect(lambda _=False, k=m: self.tag_requested.emit(k))
+            row.addWidget(link)
+            badge = drop_badge(self.kb.drop_source(m, key))
+            if badge:
+                row.addWidget(badge, 0, Qt.AlignVCenter)
+            row.addStretch(1)
+            at += 1
+            col.insertLayout(at, row)
+        got = QPushButton(self._p(t("goal_got_it")), objectName="Secondary")
+        got.setCursor(Qt.PointingHandCursor)
+        got.clicked.connect(lambda: self._toggle_wish(key))
+        acts.addWidget(got)
+        acts.addStretch(1)
+        return card
+
+    def _add_item_goal(self):
+        c = self.c
+        key = self.kb._item_by_name.get(self.goal_item.text().strip().lower())
+        if c and key and key not in wishlist.items(self.settings, c.id):
+            self._toggle_wish(key)
+        self.goal_item.clear()
+
+    def _toggle_wish(self, key: str):
+        from .widgets import WISHLIST
+        if self.c:
+            wishlist.toggle(self.settings, self.c.id, key)
+            WISHLIST.changed.emit()              # the chat's cards follow the star
+        self.refresh()
 
     # quick checks --------------------------------------------------------
 

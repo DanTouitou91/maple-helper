@@ -1,6 +1,11 @@
 {
  "title": "MapleStory Classic Damage Formula",
  "intro": "Physical and magic damage formulas for MapleStory Classic, with a compact cheat sheet. Expand the exact combat rules when you need them.",
+ "tldr": [
+  "Physical damage scales with your total Weapon Attack, primary stat and secondary stat; spells scale with INT and Magic Attack.",
+  "Mastery raises only your minimum damage, never the maximum.",
+  "After the raw roll come the hit check, defense, element, level gap and critical. A level 30 Warrior with a clean Gladius hits 60-172 with a basic attack."
+ ],
  "hero": null,
  "minutes": 16,
  "blocks": [

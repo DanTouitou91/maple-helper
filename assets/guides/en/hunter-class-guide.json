@@ -1,6 +1,11 @@
 {
  "title": "MapleStory Classic Hunter Build and Leveling Guide: Lv 30-70",
  "intro": "Hunters are the faster bow specialist built around crowd control. Arrow Bomb clears groups of mobs and stuns them in place, Amazon's Judgement slows anything that survives a critical hit, and Bow Booster keeps those arrows flying.",
+ "tldr": [
+  "Hunter is the long-range crowd-control bowman, second in AoE damage at level 70: Arrow Bomb hits up to four mobs and can stun them for 3 seconds.",
+  "The first second-job SP goes into Arrow Bomb, and Accuracy is almost never a problem.",
+  "Probably the squishiest class, with no movement skill in second job; inside 65 px it whacks with the bow instead of shooting."
+ ],
  "hero": "719e9e93196461.png",
  "minutes": null,
  "blocks": [

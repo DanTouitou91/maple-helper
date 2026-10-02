@@ -1,6 +1,11 @@
 {
  "title": "Second-Job DPS Rankings at Lv 70: Single-Target and AoE",
  "intro": "Level 70 MapleStory Classic second-job builds ranked by one-minute damage. Compare damage per cast and MP efficiency.",
+ "tldr": [
+  "At level 70, Bandit has the highest single-target damage while keeping up Steal's short Attack Power buff.",
+  "Fighter is second in single-target damage and first against a full pack once Axe Mastery Bleed is counted.",
+  "The guide also ranks damage per cast (DPC) and per point of MP (DPMP), and the MP order looks nothing like the damage-per-minute chart."
+ ],
  "hero": null,
  "minutes": 12,
  "blocks": [

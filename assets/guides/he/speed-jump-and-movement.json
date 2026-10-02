@@ -1,6 +1,11 @@
 {
  "title": "Speed, Jump ותנועה",
  "intro": "כמה מהר Speed גורם לך ללכת ב-MapleStory Classic, הקאפ של 140, כל המקורות של Speed ו-Jump, גובה קפיצה, טיפוס על חבלים והטווח של Teleport.",
+ "tldr": [
+  "ב-Speed הבסיסי של 100 הולכים 150 px/s, וכל נקודת Speed מוסיפה 1.25 px/s עד הקאפ של 140 (200 px/s). הקאפ של Jump הוא 120.",
+  "Speed לא משנה את מהירות ההתקפה, ועצות Speed מלפני ה-Big Bang כבר לא נכונות: Classic מוסיף 20 Speed מאחורי הקלעים.",
+  "Thief מגיע לקאפ של Speed עם Haste מקסימלי, Speed Potion ונעליים עם +2 Speed."
+ ],
  "blocks": [
   {
    "p": "[[img:11f90822dc92bf.png]] ב-Speed הבסיסי של 100, הדמות שלך הולכת 150 פיקסלים בשנייה ב-MapleStory Classic World. כל נקודת Speed מוסיפה 1.25 px/s, עד הקאפ של 140 (200 px/s). Jump מגיע לקאפ ב-120."

@@ -1,6 +1,11 @@
 {
  "title": "מדריך בילד ולבלינג ל-Spearman ב-MapleStory Classic: לבל 30-70",
  "intro": "Spearman נלחם עם הנשקים הארוכים ביותר מבין נשקי ה-Warrior. Spear ו-Polearm מגיעים רחוק יותר מחרבות או גרזנים, Rush מקבץ מובים ביחד, ו-Final Attack יכול להוסיף מכה שנייה כבדה שמחזירה HP.",
+ "tldr": [
+  "Spear ו-Polearm נותנים ל-Warrior את הטווח הארוך ביותר בהתקפה רגילה, ול-Spearman יש את ה-EHP הפיזי הכי גבוה מבין בילדי ה-Warrior בלבל 70.",
+  "Polearm Mastery מוסיף +20 Speed; בדרך של Spear אין Speed פסיבי, ואין מגן או באף לפארטי לפני הג'וב השלישי.",
+  "את ה-SP הראשון של הג'וב השני שמים ב-Rush, ואז ב-Mastery כדי לפתוח את Final Attack ואת Booster."
+ ],
  "blocks": [
   {
    "p": "המדריך הזה מבוסס על בילד Spearman ריאלי בלבל 70 מאת Grummash."

@@ -1,6 +1,11 @@
 {
  "title": "HP/MP Gain Explained for MapleStory Classic World",
  "intro": "Per-level HP and MP gains for every class in MapleStory Classic World, plus first, second, and third-job advancement bonuses.",
+ "tldr": [
+  "HP and MP per level are a flat number set by your class (a Warrior gets +28 HP and +12 MP), with no randomness.",
+  "Each job advancement adds 500 Max HP and MP in total, with the same class split at first, second and third job, and it doesn't heal you.",
+  "HP washing is dead in MSCW: INT gives no extra MP."
+ ],
  "hero": null,
  "minutes": 3,
  "blocks": [

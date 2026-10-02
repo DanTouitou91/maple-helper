@@ -1,6 +1,11 @@
 {
  "title": "מדריך Kerning City Party Quest (KPQ)",
  "intro": "KPQ ב-MapleStory Classic: לבל 21, ארבעה שחקנים, Channel 1. התשובות לשאלות הקופונים של Cloto, כל הקומבינציות של השלבים, הסטטים האמיתיים של King Slime, ו-Squishy Shoes.",
+ "tldr": [
+  "ארבעה שחקנים מלבל 21, חמישה שלבים שנגמרים ב-King Slime. המנהיג מדבר עם Lakelis ב-Kerning City, ולפארטי יש 30 דקות.",
+  "קחו מ-Lakelis את הקווסט החד-פעמי Proof of Companionship לפני הריצה הראשונה: 2,193 EXP, 614 mesos, פיים אחד וסקרול לעגיל.",
+  "שווה לרוץ בשביל ה-Squishy Shoes (לבל 28, +1 לכל סטט, 5 סלוטים, אפשר לסחור בהן), שיכולות ליפול כש-King Slime מת."
+ ],
  "blocks": [
   {
    "p": "[[img:da87da2541ddcd.png]] KPQ הוא פארטי קווסט של Kerning City: **ארבעה שחקנים, לבל 21 ומעלה**, חמישה שלבים שמסתיימים בבוס שנקרא King Slime. דברו עם Lakelis ב-Kerning City כדי להתחיל."

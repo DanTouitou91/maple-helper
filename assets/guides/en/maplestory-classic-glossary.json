@@ -1,6 +1,11 @@
 {
  "title": "MapleStory Classic World Glossary",
  "intro": "Every acronym, slang term, and game mechanic you need to know for MapleStory Classic World, grouped by category from leveling to economy.",
+ "tldr": [
+  "Explains the acronyms and slang you'll meet in guides and on Discord (kPQ, AP, pure DEX and more), grouped by topic.",
+  "You get 5 AP every level to raise STR, DEX, INT, LUK, HP or MP.",
+  "Founder's Access begins October 6, 2026, and Grand Launch opens to everyone on October 21."
+ ],
  "hero": null,
  "minutes": 6,
  "blocks": [

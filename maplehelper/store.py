@@ -112,6 +112,7 @@ DEFAULT_SETTINGS = {
     "seen_version": "",           # the app version whose "what's new" the player has seen
     "last_session": None,         # summary of the previous play session, shown when the chat next opens
     "instant_answers": True,      # simple factual questions answered from the KB, without Claude
+    "wish_prices": {},            # item key -> {"median": last Free Market median seen, "t", "alerted": a drop shown}
 }
 
 
@@ -163,6 +164,8 @@ class Character:
     quests_done: list[str] = field(default_factory=list)   # quest keys the player marked done
     town: str = ""                                    # citizenship town (Henesys / Kerning City), "" = not chosen
     crafts: dict = field(default_factory=dict)        # crafting profession -> its level
+    goals: list[dict] = field(default_factory=list)   # [{"level": target, "t": added, "done": time reached or 0}]
+    quest_ticks: dict = field(default_factory=dict)   # active quest name -> the requirements the player ticked
     updated_at: float = field(default_factory=time.time)
 
     def summary(self) -> str:
@@ -202,6 +205,7 @@ class Profiles:
 
     def add(self, name: str, base_class: str, job: str, level: int) -> Character:
         c = Character(id=uuid.uuid4().hex[:8], name=name, base_class=base_class, job=job, level=level)
+        ProgressLog(c.id).add(level, None)          # where the chart starts
         self.characters.append(c)
         self.active_id = c.id
         self.save()
@@ -210,9 +214,56 @@ class Profiles:
     def edit(self, cid: str, name: str, base_class: str, job: str, level: int) -> None:
         c = next((c for c in self.characters if c.id == cid), None)
         if c:
+            if c.level != level:
+                self._progressed(c, level, None)
             c.name, c.base_class, c.job, c.level = name, base_class, job, level
             c.updated_at = time.time()
             self.save()
+
+    def _progressed(self, c: Character, level: int, pct: float | None) -> None:
+        """Level or EXP moved: log it for the progress chart and tick off level goals it reached."""
+        ProgressLog(c.id).add(level, pct)
+        for g in c.goals:
+            if g.get("level") and not g.get("done") and level >= g["level"]:
+                g["done"] = time.time()
+
+    def add_goal(self, level: int) -> None:
+        c = self.active
+        if c and not any(g.get("level") == level for g in c.goals):
+            c.goals.append({"level": level, "t": time.time(), "done": time.time() if c.level >= level else 0})
+            self.save()
+
+    def remove_goal(self, level: int) -> None:
+        c = self.active
+        if c:
+            c.goals = [g for g in c.goals if g.get("level") != level]
+            self.save()
+
+    def track_quest(self, name: str) -> None:
+        c = self.active
+        if c and name not in c.active_quests:
+            c.active_quests.append(name)
+            self.save()
+
+    def tick_quest(self, name: str, need: str, on: bool) -> None:
+        """The player ticks a requirement of an active quest by hand."""
+        c = self.active
+        if not c:
+            return
+        ticks = [x for x in c.quest_ticks.get(name, []) if x != need] + ([need] if on else [])
+        c.quest_ticks = {**c.quest_ticks, name: ticks}
+        self.save()
+
+    def complete_quest(self, name: str, key: str | None = None) -> None:
+        """An active quest is done: off the tracker, and (known to the KB) off the quests page too."""
+        c = self.active
+        if not c:
+            return
+        c.active_quests = [q for q in c.active_quests if q != name]
+        c.quest_ticks = {q: v for q, v in c.quest_ticks.items() if q != name}
+        if key and key not in c.quests_done:
+            c.quests_done.append(key)
+        self.save()
 
     def remove(self, cid: str) -> None:
         c = next((c for c in self.characters if c.id == cid), None)
@@ -221,6 +272,7 @@ class Profiles:
         if c.avatar:
             (AVATAR_DIR / c.avatar).unlink(missing_ok=True)
         History(cid).clear()
+        ProgressLog(cid).clear()
         self.characters.remove(c)
         if self.active_id == cid:
             self.active_id = self.characters[0].id if self.characters else None
@@ -257,6 +309,7 @@ class Profiles:
         for q in update.get("quests_completed", []) or []:
             if q in c.active_quests:
                 c.active_quests.remove(q)
+                c.quest_ticks.pop(q, None)
                 changed.append(("quest-", q))
         stats = update.get("stats")
         if isinstance(stats, dict):
@@ -272,6 +325,8 @@ class Profiles:
         if isinstance(pct, (int, float)) and 0 <= pct <= 100 and pct != c.exp_pct:
             c.exp_pct = round(float(pct), 2)
             changed.append(("exp", c.exp_pct))
+        if any(f in ("level", "exp") for f, _ in changed):
+            self._progressed(c, c.level, c.exp_pct if any(f == "exp" for f, _ in changed) else None)
         note = update.get("note")
         if note and note not in c.notes:
             c.notes.append(note)
@@ -340,4 +395,33 @@ class History:
 
     def clear(self) -> None:
         for p in (self.log, self.summaries_path, self.summaries_path.with_name(self.summaries_path.name + ".bak")):
+            p.unlink(missing_ok=True)
+
+
+# ---------------------------------------------------------------- progress
+
+class ProgressLog:
+    """Per-character level / EXP readings over time, [time, level, EXP % or None], for the progress page."""
+
+    KEEP = 2000
+
+    def __init__(self, character_id: str):
+        self.path = HISTORY_DIR / f"{character_id}.progress.json"
+
+    def samples(self) -> list[list]:
+        data = _read_json(self.path, [])
+        return [s for s in data if isinstance(s, list) and len(s) == 3] if isinstance(data, list) else []
+
+    def add(self, level: int, pct: float | None, now: float | None = None) -> None:
+        rows = self.samples()
+        if rows and rows[-1][1:] == [level, pct]:
+            return
+        rows.append([round(now if now is not None else time.time()), level, pct])
+        try:
+            _write_json(self.path, rows[-self.KEEP:])
+        except OSError:
+            pass                 # a progress point is not worth failing a profile update over
+
+    def clear(self) -> None:
+        for p in (self.path, self.path.with_name(self.path.name + ".bak")):
             p.unlink(missing_ok=True)

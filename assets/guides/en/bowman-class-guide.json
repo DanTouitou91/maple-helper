@@ -1,6 +1,11 @@
 {
  "title": "MapleStory Classic Bowman Build and Leveling Guide: Lv 1-30",
  "intro": "Bowmen train under Athena Pierce in Henesys. They shoot arrows from a very long range, keep mobs out of their face with bow whack, and have the highest accuracy in the game.",
+ "tldr": [
+  "Advance with Athena Pierce in Henesys at level 10 (no stat requirement) and put every AP into DEX, which raises both damage and Accuracy.",
+  "Bowmen have the longest range in the game, up to 120 px more with The Eye of Amazon, and Critical Shot gives 20% Critical Rate.",
+  "Mobbing is limited before second job, arrows are a constant expense, and low HP punishes bad positioning."
+ ],
  "hero": null,
  "minutes": null,
  "blocks": [
