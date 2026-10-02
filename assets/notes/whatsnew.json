@@ -1,5 +1,28 @@
 [
  {
+  "version": "0.8.0",
+  "he": [
+   "שאלות מוצעות בצ'אט ריק, וכפתורי המשך אחרי כל תשובה (\"איפה זה?\", \"מה הוא מפיל?\").",
+   "רואים מה ה-AI עושה בזמן שהוא חושב, ואפשר לעצור תשובה בכפתור או ב-Esc.",
+   "עמוד התקדמות חדש בכלים: גרף לבלים, EXP לשעה, תחזית ללבל הבא ומטרות אישיות.",
+   "מעקב קווסטים: מה נשאר לאסוף ומי מפיל את זה. התראת מחיר על פריטים שאתם מחפשים.",
+   "תקציר קצר בראש כל מדריך, וקישור \"פתח בכלים\" מתוך הצ'אט.",
+   "אפשר להשתמש בלי לחבר AI: תשובות מיידיות, מדריכים וכלים. החיבור ל-Claude או ל-ChatGPT בהמשך, בלחיצה.",
+   "מצב ניגודיות גבוהה, שקיפות לחלון הצ'אט, מצב שהלחיצות עוברות דרכו למשחק, ודף פרטיות.",
+   "מהיר ויציב יותר: תשובות לא נתקעות, החלון לא קופא, והדמויות והשיחות נשמרות גם אחרי הפסקת חשמל."
+  ],
+  "en": [
+   "Suggested questions in an empty chat, and follow-up buttons after each answer (\"Where is it?\", \"What does it drop?\").",
+   "See what the AI is doing while it thinks, and stop an answer with a button or Esc.",
+   "A new Progress page in the play tools: a level chart, EXP per hour, a forecast to the next level and personal goals.",
+   "Quest tracking: what's left to collect and who drops it. Price alerts for the items you're looking for.",
+   "A short summary at the top of every guide, and \"Open in play tools\" from the chat.",
+   "Use it without connecting an AI: instant answers, guides and tools. Connect Claude or ChatGPT later with one click.",
+   "High-contrast mode, chat window transparency, click-through to the game, and a privacy page.",
+   "Faster and steadier: answers no longer get stuck, the window doesn't freeze, and characters and chats survive a power cut."
+  ]
+ },
+ {
   "version": "0.7.2",
   "he": [
    "החלפת שפה בהגדרות מחליפה עכשיו את הכל, גם את ההודעות בצ'אט ואת ההסבר על צילום המסך."

@@ -79,6 +79,12 @@ jobs:
             gh release download kb-seed --repo "$GITHUB_REPOSITORY" --pattern kb.zip --pattern kb-manifest.json --dir kb-in 2>/dev/null || true
             if [ -f kb-in/kb.zip ]; then echo "Using the kb-seed release"; fi
           fi
+          if [ ! -f kb-in/kb.zip ]; then
+            # this fork publishes no KB of its own: installed apps follow the original project's (updater.KB_REPO)
+            kb_repo=$(python -c 'import re; print(re.search(r"KB_REPO = \"([^\"]+)\"", open("maplehelper/updater.py").read()).group(1))')
+            gh release download --repo "$kb_repo" --pattern kb.zip --pattern kb-manifest.json --dir kb-in 2>/dev/null || true
+            if [ -f kb-in/kb.zip ]; then echo "Using $kb_repo's published KB"; fi
+          fi
           if [ -f kb-in/kb.zip ]; then
             # carry the published KB forward unchanged (its manifest already points at latest/download)
             want=$(python -c 'import json; print(json.load(open("kb-in/kb-manifest.json"))["sha256"])')
