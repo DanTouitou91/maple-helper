@@ -101,9 +101,16 @@ def test_manifest_url_uses_latest_release():
     assert updater.MANIFEST_URL.endswith("/releases/latest/download/kb-manifest.json")
 
 
+def test_app_updates_come_from_the_fork_and_kb_from_the_original():
+    # an upstream release must never replace this fork's code; game data may still come from upstream
+    assert updater.APP_REPO == "DanTouitou91/maple-helper"
+    assert updater.MANIFEST_URL.startswith(f"https://github.com/{updater.KB_REPO}/")
+    assert updater.KB_REPO != updater.APP_REPO
+
+
 # ---------------------------------------------------------------- app self-update
 
-API = "https://api.github.com/repos/Amitaflalo1995/maple-helper/releases/latest"
+API = "https://api.github.com/repos/DanTouitou91/maple-helper/releases/latest"
 SETUP = b"MZ fake installer bytes"
 
 
@@ -192,8 +199,8 @@ def test_sums_line_with_binary_marker(app_env):
 
 def test_mac_update_notice_names_the_new_release(app_env):
     _, _, publish = app_env
-    publish(tag="v0.4.0", html_url="https://github.com/Amitaflalo1995/maple-helper/releases/tag/v0.4.0")
-    assert updater.newer_release("0.3.0") == ("0.4.0", "https://github.com/Amitaflalo1995/maple-helper/releases/tag/v0.4.0")
+    publish(tag="v0.4.0", html_url="https://github.com/DanTouitou91/maple-helper/releases/tag/v0.4.0")
+    assert updater.newer_release("0.3.0") == ("0.4.0", "https://github.com/DanTouitou91/maple-helper/releases/tag/v0.4.0")
 
 
 @pytest.mark.parametrize("kwargs", [{"tag": "v0.3.0"}, {"tag": "v0.4.0", "prerelease": True}])
