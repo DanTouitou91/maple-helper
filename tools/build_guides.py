@@ -13,6 +13,7 @@ Blocks (one dict each, text uses **bold**, [[img:<file>]] for an inline icon, "\
 
 Translations (assets/guides/<lang>/<slug>.json) have the same blocks with the text translated, and
 "source_hash" = the English file's hash, so the reader knows when the English guide changed.
+"tldr" (three key points shown above the guide) is written by hand; a rebuild keeps the existing one.
 
 Run: python tools/build_guides.py [slug ...]     (all guides in data/kb when no slug is given)
 """
@@ -410,6 +411,24 @@ def content_hash(guide: dict) -> str:
     return hashlib.sha1(body.encode("utf-8")).hexdigest()[:12]
 
 
+def keep_tldr(guide: dict, old_path: Path) -> dict:
+    """The guide with the "tldr" (three key points, written by hand) of the file it replaces, after the intro.
+    It isn't part of the content hash, so a summary never marks a translation as outdated."""
+    try:
+        tldr = json.loads(old_path.read_text(encoding="utf-8")).get("tldr")
+    except (OSError, ValueError, AttributeError):
+        tldr = None
+    if not tldr or "tldr" in guide:
+        return guide
+    out = {}
+    for k, v in guide.items():
+        out[k] = v
+        if k == "intro":
+            out["tldr"] = tldr
+    out.setdefault("tldr", tldr)
+    return out
+
+
 def guide_slugs() -> list[str]:
     from maplehelper.kb import KnowledgeBase
     kb = KnowledgeBase()
@@ -425,6 +444,7 @@ def main(argv: list[str]) -> None:
         g = convert(page, images)
         g["source"] = f"{SITE}/msclassic/guides/{slug}"
         g["hash"] = content_hash(g)
+        g = keep_tldr(g, OUT / "en" / f"{slug}.json")
         (OUT / "en" / f"{slug}.json").write_text(json.dumps(g, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
         print(f"{slug}: {len(g['blocks'])} blocks")
     if not argv:     # a full build: drop pictures no guide uses any more

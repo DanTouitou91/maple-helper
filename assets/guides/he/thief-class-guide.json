@@ -1,6 +1,11 @@
 {
  "title": "מדריך בילד ולבלינג ל-Thief ב-MapleStory Classic: לבל 1-30",
  "intro": "Thief מתאמן אצל ה-Dark Lord מתחת ל-Kerning City. Lucky Seven הוא הבילד המהיר יותר ללבל 10-30 ל-Assassin ו-Bandit עתידיים. הרבה Bandits ישחקו כ-Sindit, ואז יעבירו את ה-SP של הג'וב הראשון לסקילי dagger אחרי ההתקדמות לג'וב השני עם SP reset.",
+ "tldr": [
+  "מתקדמים אצל ה-Dark Lord מתחת ל-Fusion Jazz Bar ב-Kerning City בלבל 10, בלי דרישת סטטים.",
+  "Lucky Seven הוא הבילד המהיר יותר ללבל 10-30 גם ל-Assassin וגם ל-Bandit עתידיים: טווח ארוך, ואפשר לקפוץ ולתקוף.",
+  "גם הלבל וגם LUK מעלים Accuracy, ו-Nimble Body מקסימלי מוסיף 15. אין באמת סקיל מובינג לפני הג'וב השלישי."
+ ],
  "blocks": [
   {
    "p": "**יתרונות**"

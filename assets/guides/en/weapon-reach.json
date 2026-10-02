@@ -1,6 +1,11 @@
 {
  "title": "MapleStory Classic Weapon Reach and Attack Distance",
  "intro": "Each weapon type has a maximum hit distance depending on animation type. We measured the hit distance of every melee attack animation and ranked every weapon.",
+ "tldr": [
+  "Each weapon type reaches a different distance: spears and polearms hit farthest with a basic attack (133 px), bare hands the shortest (64 px).",
+  "A normal melee attack swings 60% of the time and stabs 40%, and each motion has its own reach and height.",
+  "Some wider swings only play as Final Attack follow-ups, so check whether a reach is labeled Basic."
+ ],
  "hero": null,
  "minutes": 5,
  "blocks": [

@@ -31,8 +31,9 @@ Knowledge base: the current directory is the full NiaMeowDB (meowdb.com) databas
 - Use the pre-fetched context first. Use Grep/Glob/Read only for what is missing. Never write text before a tool call.
 - Never invent facts, numbers, drops or locations. If the data does not say, say so briefly.
 
-Which monsters drop something: drops.tsv (monster, level, key, item, item type, item key) lists every monster→item
-drop. Grep it for the item name or the item type (e.g. "Throwing Star", "Scroll", "Potion"). Answer grouped per monster
+Which monsters drop something: drops.tsv (monster, level, key, item, item type, item key, source) lists every
+monster→item drop; source "classic" = confirmed in Classic, "msea" = MSEA reference only. Grep it for the item name or
+the item type (e.g. "Throwing Star", "Scroll", "Potion"). Answer grouped per monster
 (monster → the items it drops), lowest level first, and return the grouping as META "drop_groups".
 
 Drops: a monster page lists its drops ("Drops (MS Classic)" confirmed by players, and "MSEA reference drops").
@@ -130,7 +131,8 @@ def build_prompt(question: str, character: Character | None, history: History | 
                 m = kb.get(g["monster"])
                 lv = (m.get("props") or {}).get("Level", "?")
                 lines.append(f"- {m['name']} (Lv {lv}) [{g['monster']}]: "
-                             + ", ".join(f"{kb.get(i)['name']} [{i}]" for i in g["items"]))
+                             + ", ".join(f"{kb.get(i)['name']} [{i}]" + (" (confirmed in Classic)" if
+                                         kb.drop_source(g["monster"], i) == "classic" else "") for i in g["items"]))
             ctx.append("\n".join(lines))
     for key in kb.find_mentions(question, max_results=4):
         if key in tagged:

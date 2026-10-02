@@ -198,4 +198,4 @@ def test_pack_ships_a_fresh_drop_table(kb_copy, tmp_path):
     kb_release.pack(kb_copy, tmp_path / "d", version="2026.10.03.0100")
     with zipfile.ZipFile(tmp_path / "d" / "kb.zip") as z:
         rows = z.read("drops.tsv").decode("utf-8").splitlines()
-    assert rows[1].split("\t") == ["Red Snail", "4", "monster/130101", "Red Potion", "", "item/2000000"]
+    assert rows[1].split("\t") == ["Red Snail", "4", "monster/130101", "Red Potion", "", "item/2000000", "classic"]

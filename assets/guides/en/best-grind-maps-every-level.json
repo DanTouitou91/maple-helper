@@ -1,6 +1,11 @@
 {
  "title": "Best Grind Maps for Every Level 1-70",
  "intro": "The best training spots and grind maps in MapleStory Classic World for every level from 1 to 70, ranked by EXP per hour and filtered to level-appropriate mobs.",
+ "tldr": [
+  "Ant Tunnel through your 20s, the Kerning Subway from the 30s, then Sleepy Dungeon V in the late 50s.",
+  "Max EXP/hr is a solo ceiling for comparing maps: walking between platforms and potion trips mean nobody reaches it.",
+  "A party raises the rate: +10% EXP with two members, +20% with three and +30% from four."
+ ],
  "hero": null,
  "minutes": 10,
  "blocks": [

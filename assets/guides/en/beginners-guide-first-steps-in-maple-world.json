@@ -1,6 +1,11 @@
 {
  "title": "Beginner's Guide: MapleStory Classic World",
  "intro": "Your first hours in MapleStory Classic World, from Maple Island through level 10. Job choices, AP allocation rules, and what to grind on the way.",
+ "tldr": [
+  "Do every Maple Island quest (you'll likely reach level 8) and get the Green Relaxer chair from Pio's quest: it's the only place to get it.",
+  "Start with the Wooden Club, then switch to the Razor at level 5.",
+  "The 9 SP you earn by level 10 max all three Beginner skills: Nimble Feet first, then Three Snails, Recovery last."
+ ],
  "hero": null,
  "minutes": 8,
  "blocks": [

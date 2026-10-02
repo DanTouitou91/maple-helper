@@ -1,6 +1,11 @@
 {
  "title": "Spawn Rate and Map Capacity",
  "intro": "How MapleStory Classic mobs respawn: 7.56s server tick, 5s per-point cooldown, and the player-count scaling that decides how many mobs fill a map.",
+ "tldr": [
+  "The server checks respawns every 7.56 seconds, so mobs killed together come back together in one wave.",
+  "Each spawn point also has its own cooldown: 5 seconds by default, or its own timer for timed spawns like bosses.",
+  "A map fills 75% of its spawn points with one player, 5% more per extra player, up to 100% with six (still being verified)."
+ ],
  "hero": null,
  "minutes": 3,
  "blocks": [

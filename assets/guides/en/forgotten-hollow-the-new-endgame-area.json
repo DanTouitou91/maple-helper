@@ -1,6 +1,11 @@
 {
  "title": "Forgotten Hollow Guide: Quests, Monsters and Maps (Lv 39-60)",
  "intro": "Forgotten Hollow exists nowhere else in MapleStory: 15 quests, a cave fairy town, ten new monsters and the Rotten Mushmom boss.",
+ "tldr": [
+  "A brand-new cave for levels 39-60 with its own fairy town, ten new monsters, the Rotten Mushmom boss and 15 quests.",
+  "The story starts at level 39 with Grendel the Really Old in Ellinia. The front door is The Tree Tunnel At the Forest Up North; Sleepy Dungeon V has a back way in.",
+  "Rotten Mushmom is level 60 and only spawns in Someone Else's Grave, a hidden map off Decayed Tunnel I."
+ ],
  "hero": null,
  "minutes": 8,
  "blocks": [

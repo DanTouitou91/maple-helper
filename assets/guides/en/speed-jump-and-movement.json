@@ -1,6 +1,11 @@
 {
  "title": "Speed, Jump and Movement",
  "intro": "How fast Speed makes you walk in MapleStory Classic, the 140 cap, every Speed and Jump source, jump height, rope climbing and Teleport range.",
+ "tldr": [
+  "At the base Speed of 100 you walk 150 px/s; each point of Speed adds 1.25 px/s up to the 140 cap (200 px/s). Jump caps at 120.",
+  "Speed doesn't change how fast you attack, and pre-Big Bang Speed advice is outdated: Classic adds 20 Speed behind the scenes.",
+  "Thieves reach the Speed cap with max Haste, a Speed Potion and shoes with +2 Speed."
+ ],
  "hero": null,
  "minutes": 4,
  "blocks": [

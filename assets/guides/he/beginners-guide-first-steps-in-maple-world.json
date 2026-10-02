@@ -1,6 +1,11 @@
 {
  "title": "מדריך למתחילים: MapleStory Classic World",
  "intro": "השעות הראשונות שלכם ב-MapleStory Classic World, מ-Maple Island ועד לבל 10. בחירת ג'וב, כללים לחלוקת AP, ומה לגרנד בדרך.",
+ "tldr": [
+  "עשו את כל הקווסטים ב-Maple Island (סביר שתגיעו ללבל 8) וקחו את הכיסא Green Relaxer מהקווסט של Pio: זה המקום היחיד להשיג אותו.",
+  "התחילו עם ה-Wooden Club, ועברו ל-Razor בלבל 5.",
+  "9 ה-SP שמקבלים עד לבל 10 מספיקים למקסם את שלושת הסקילים של Beginner: קודם Nimble Feet, אחר כך Three Snails, ו-Recovery אחרון."
+ ],
  "blocks": [
   {
    "p": "[[img:d6e564683a59cd.png]]"

@@ -31,6 +31,49 @@ def local_version() -> str:
         return ""
 
 
+def data_time(root: Path | None = None) -> float | None:
+    """When the game data was fetched (unix time): meta.json's fetched_at, else its version stamp."""
+    from datetime import datetime, timezone
+    try:
+        meta = json.loads(((root or kb_dir()) / "meta.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(meta, dict):
+        return None
+    try:
+        return datetime.fromisoformat(str(meta.get("fetched_at")).replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        pass
+    v = _kb_version(meta.get("version", ""))           # 2026.10.02.0638
+    try:
+        return datetime(v[0], v[1], v[2], *divmod(v[3] if len(v) > 3 else 0, 100), tzinfo=timezone.utc).timestamp()
+    except (IndexError, ValueError):
+        return None
+
+
+def freshness(t, root: Path | None = None, now: float | None = None) -> str:
+    """ "Game data updated 3 days ago" in the player's language, or "" when the KB has no date."""
+    import time
+    when = data_time(root)
+    if when is None:
+        return ""
+    s = max(0, (now if now is not None else time.time()) - when)
+    h, d = int(s // 3600), int(s // 86400)
+    if h < 1:
+        ago = t("ago_now")
+    elif d < 1:
+        ago = t("ago_hour") if h == 1 else t("ago_hours", n=h)
+    elif d < 2:
+        ago = t("ago_yesterday")
+    elif d < 60:
+        ago = t("ago_days", n=d)
+    elif d < 365:
+        ago = t("ago_months", n=d // 30)
+    else:
+        ago = t("ago_years", n=d // 365)
+    return t("data_updated", ago=ago)
+
+
 def changelog() -> list[dict]:
     """Patch notes of recent KB updates, newest first (written by tools/kb_release.py)."""
     try:

@@ -1,6 +1,11 @@
 {
  "title": "MapleStory Classic Page Build and Leveling Guide: Lv 30-70",
  "intro": "Pages are MapleStory's stubborn front-line knights. They carry swords or blunt weapons, slow mobs with Threaten, and can pair a one-handed weapon with a shield. Their second job has more control and defensive choices than the other Warrior branches.",
+ "tldr": [
+  "Page has the second-best damage per MP at level 70 and more control and defense than the other Warrior branches.",
+  "Threaten slows up to four mobs and lowers their WDEF; one-handed builds can carry a shield and block physical hits with Guard.",
+  "Put the first second-job SP into Rush. The reference build uses a two-handed blunt weapon; swords work with the matching skills."
+ ],
  "hero": "9e23d32005be5a.png",
  "minutes": null,
  "blocks": [

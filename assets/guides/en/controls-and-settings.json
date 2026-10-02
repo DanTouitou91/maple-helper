@@ -1,6 +1,11 @@
 {
  "title": "MapleStory Classic Controls and Settings",
  "intro": "Set up MapleStory Classic key bindings and Quick Slots. Learn the controller, HP/MP warning, graphics, screenshot and chat options shown in COT2.",
+ "tldr": [
+  "You can rebind movement (WASD too) and switch between three saved key layouts: Classic, Modern and Compact.",
+  "Quick Slots have eight cells; turn on Enable 3 Rows to get twelve.",
+  "Controllers are supported, but keep a keyboard nearby for setup and chat. These are COT2 test-client options and can change before launch."
+ ],
  "hero": null,
  "minutes": 5,
  "blocks": [

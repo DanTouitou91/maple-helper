@@ -1,6 +1,11 @@
 {
  "title": "מדריך בילד ולבלינג ל-Warrior ב-MapleStory Classic: לבל 1-30",
  "intro": "Warriors הם קלאס המלי שבחזית ב-MapleStory. הם מתאמנים אצל Dances with Balrog ב-Perion, בונים סביב STR, ומבלים את 30 הלבלים הראשונים בלימוד Power Strike ו-Slash Blast לפני שבוחרים Fighter, Page או Spearman.",
+ "tldr": [
+  "Warrior בונה סביב STR ומשקיע בלבלים 1-30 ב-Power Strike וב-Slash Blast. Slash Blast פוגע בעד ארבעה מובים כבר מהנקודה הראשונה.",
+  "ל-Warrior הלבל נותן יותר Accuracy מלכל קלאס אחר (לבל אחד שווה בערך 1.67 DEX), אז כמה לבלים יכולים לפתור מפה מהר יותר מעוד DEX.",
+  "מתחילים עם ה-Club, עוברים ל-Razor בלבל 5, ומתקדמים אצל Dances with Balrog ב-Perion בלבל 10."
+ ],
  "blocks": [
   {
    "p": "**יתרונות**"

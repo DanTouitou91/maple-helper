@@ -1,6 +1,11 @@
 {
  "title": "MapleStory Classic Assassin Build and Leveling Guide: Lv 30-70",
  "intro": "Assassins continue to use Lucky Seven to deal damage from afar, with Haste to get around the map faster. They are still one of the most popular jobs of all time, so expect pricey claws, scrolls, and throwing stars.",
+ "tldr": [
+  "Assassins keep dealing damage from afar with Lucky Seven: third in single-target damage at level 70, and the highest at range.",
+  "The first second-job SP goes into Haste (Speed +10, Jump +1), which also speeds up the party.",
+  "Keep Kerning City citizenship: Helpful Stranger unlocks Wolbi Throwing Stars at 1,000 mesos for a set of 500. Expect pricey claws, scrolls and stars."
+ ],
  "hero": "3b7e255f48e97c.png",
  "minutes": null,
  "blocks": [

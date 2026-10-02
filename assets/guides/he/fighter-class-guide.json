@@ -1,6 +1,11 @@
 {
  "title": "מדריך Fighter ל-MapleStory Classic: לבלים 30-70",
  "intro": "Fighter הם הלוחמים בקו הראשון של MapleStory. הם מתאמנים אצל Dances with Balrog, נושאים חרבות או גרזנים, והכי טובים כשהם סופגים הכל בפרצוף ונלחמים מקרוב עם המובים.",
+ "tldr": [
+  "ל-Fighter יש את הנזק הכי טוב לכל MP בלבל 70, ו-Rage מקסימלי נותן לחברי הפארטי הקרובים +40 Attack Power.",
+  "את ה-SP הראשון של הג'וב השני שמים ב-Rush, ואז Rage בלבל 31. Weapon Mastery, Booster ו-Final Attack נועלים את ה-SP על חרבות או גרזנים.",
+  "ב-Classic, Power Guard הוא סקיל של ג'וב שלישי, ו-Power Strike ו-Slash Blast נשארים ההתקפות הראשיות עד הג'וב השלישי."
+ ],
  "blocks": [
   {
    "p": "המדריך הזה מבוסס על בילד ריאלי של Fighter בלבל 70 מאת Grummash."

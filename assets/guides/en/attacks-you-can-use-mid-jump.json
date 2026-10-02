@@ -1,6 +1,11 @@
 {
  "title": "Attacks You Can Use Mid-Jump",
  "intro": "Every MapleStory Classic attack you can use while jumping, sorted by class, with third job listed separately. Checked against the game's own files.",
+ "tldr": [
+  "Every thief attack can be used mid-jump, and so can both first-job warrior attacks, Power Strike and Slash Blast.",
+  "Bowmen's only mid-jump attack is Power Knockback; magicians get Heal.",
+  "Third job isn't available at launch, so its mid-jump list comes from the test build and may change."
+ ],
  "hero": null,
  "minutes": 3,
  "blocks": [

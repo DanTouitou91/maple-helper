@@ -290,9 +290,9 @@ def _rich(text: str, rtl: bool, icon_px: int = 22) -> str:
     return out
 
 
-def book_html(b: dict, mode: str = "light", rtl_ui: bool = False) -> str:
+def book_html(b: dict, mode: str = "light", rtl_ui: bool = False, tldr_head: str = "") -> str:
     """The reader's HTML (QTextBrowser): headings, paragraphs, notes, lists, tables, pictures,
-    links to other guides (href="guide:<slug>")."""
+    links to other guides (href="guide:<slug>"). tldr_head: the title of the "in short" box on top."""
     he = b.get("lang") != "en"
     col = NOTE_COLORS.get(mode, NOTE_COLORS["light"])
 
@@ -311,6 +311,13 @@ def book_html(b: dict, mode: str = "light", rtl_ui: bool = False) -> str:
     if b.get("intro"):
         r = rtl_of(b["intro"])
         out.append(f"<p {'dir=rtl align=right' if r else ''}><i>{_rich(b['intro'], r)}</i></p>")
+    if tldr_head and b.get("tldr"):
+        # the guide's key points in a compact box, right under its intro
+        points = "".join(f"<li {'dir=rtl align=right' if rtl_of(x) else ''}>{_rich(x, rtl_of(x))}</li>" for x in b["tldr"])
+        r = rtl_of(tldr_head)
+        out.append(f"<table width='100%' cellpadding='10' cellspacing='0' style='margin: 4px 0 10px 0;'><tr>"
+                   f"<td bgcolor='{col['note']}'><p {'dir=rtl align=right' if r else ''} style='margin:0'>"
+                   f"<b>{html.escape(tldr_head)}</b></p><ul {side} style='margin: 4px 0 0 0;'>{points}</ul></td></tr></table>")
     for blk in b.get("blocks", []):
         if "h2" in blk:
             out.append(para(blk["h2"], "h2", "margin: 18px 0 6px 0;"))

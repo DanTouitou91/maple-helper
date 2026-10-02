@@ -1,6 +1,11 @@
 {
  "title": "MapleStory Classic Fighter Build and Leveling Guide: Lv 30-70",
  "intro": "Fighters are MapleStory's front-line brawlers. They train under Dances with Balrog, carry swords or axes, and do their best work by face tanking everything, getting up close and personal with mobs.",
+ "tldr": [
+  "Fighter has the best damage per MP at level 70, and max Rage gives nearby party members +40 Attack Power.",
+  "Put the first second-job SP into Rush, then Rage at 31. Weapon Mastery, Booster and Final Attack lock your SP to swords or axes.",
+  "Power Guard is a third-job skill in Classic, and Power Strike and Slash Blast stay your main attacks until third job."
+ ],
  "hero": "11932925d67eb1.png",
  "minutes": null,
  "blocks": [

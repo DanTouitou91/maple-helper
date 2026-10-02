@@ -1,6 +1,11 @@
 {
  "title": "מדריך בילד ועליית לבלים ל-F/P Wizard ב-MapleStory Classic: לבל 30-70",
  "intro": "ה-Fire Arrow של F/P Wizard שורף מטרה עד הסוף בזמן שה-Poison Breath מרעיל מפה שלמה. הם האדונים של אפקטי נזק לאורך זמן.",
+ "tldr": [
+  "F/P Wizard הם המומחים לנזק לאורך זמן: Fire Arrow שורף מטרה אחת בזמן ש-Poison Breath מרעיל מפה שלמה.",
+  "Fire Arrow עושה 25% יותר נזק למובים חלשים לאש ו-25% פחות לעמידים לאש; Poison Breath מקסימלי עולה 40 MP לכל קאסט.",
+  "ה-SP הראשון בג'וב השני הולך ל-Teleport (55 MP בלבל 1), ו-Meditation נותן לחברי הפארטי הקרובים 25 Magic Attack."
+ ],
  "blocks": [
   {
    "p": "המדריך הזה מבוסס על בילד F/P Wizard ריאלי בלבל 70 של Grummash."

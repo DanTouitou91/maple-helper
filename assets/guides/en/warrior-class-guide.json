@@ -1,6 +1,11 @@
 {
  "title": "MapleStory Classic Warrior Build and Leveling Guide: Lv 1-30",
  "intro": "Warriors are MapleStory's front-line melee class. They train under Dances with Balrog in Perion, build around STR, and spend their first 30 levels learning Power Strike and Slash Blast before choosing Fighter, Page, or Spearman.",
+ "tldr": [
+  "Warriors build around STR and spend levels 1-30 on Power Strike and Slash Blast; Slash Blast hits up to four mobs from its first point.",
+  "Character level gives Warriors more Accuracy than any other class (one level is worth about 1.67 DEX), so a few levels can fix a map faster than more DEX.",
+  "Start with the Club, switch to the Razor at level 5, and advance with Dances with Balrog in Perion at level 10."
+ ],
  "hero": "68a9aaf13ab9ed.png",
  "minutes": null,
  "blocks": [

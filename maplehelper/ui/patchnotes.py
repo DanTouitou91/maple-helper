@@ -182,6 +182,8 @@ class PatchNotesDialog(GlassDialog):
                 lines.append(t("pn_drops_added", items=", ".join(r["drops_added"])))
             if r.get("drops_removed"):
                 lines.append(t("pn_drops_removed", items=", ".join(r["drops_removed"])))
+            if r.get("drops_confirmed"):
+                lines.append(t("pn_drops_confirmed", items=", ".join(r["drops_confirmed"])))
             if r.get("old_name"):
                 lines.append(t("pn_renamed", name=r["old_name"]))
             return ChangeCard(self.kb, r, _category(t, r.get("category", "")), lines, rtl)

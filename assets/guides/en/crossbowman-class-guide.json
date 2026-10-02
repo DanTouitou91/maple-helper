@@ -1,6 +1,11 @@
 {
  "title": "MapleStory Classic Crossbowman Build and Leveling Guide: Lv 30-70",
  "intro": "Crossbowmen trade attack speed for heavier damage. Iron Arrow pierces through up to four mobs, Crossbow Mastery can ignore enemy's physical defense, and Final Attack gives a strong single-target follow-up.",
+ "tldr": [
+  "Crossbowmen trade attack speed for heavier hits: Iron Arrow pierces up to four mobs in a line, losing 20% damage on each later one.",
+  "Crossbow Mastery can ignore enemy Weapon Defense on 20% of attacks, and the level 50-70 crossbows carry more base W.ATK than the matching bows.",
+  "The first second-job SP goes into Iron Arrow; the best maps have long, flat lanes that keep mobs lined up."
+ ],
  "hero": "1082ef08e7568f.png",
  "minutes": null,
  "blocks": [

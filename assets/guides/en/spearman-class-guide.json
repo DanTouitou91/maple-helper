@@ -1,6 +1,11 @@
 {
  "title": "MapleStory Classic Spearman Build and Leveling Guide: Lv 30-70",
  "intro": "Spearmen fight with the longest Warrior weapons. Spears and polearms reach farther than swords or axes, Rush groups mobs, and Final Attack can add a heavy second hit that restores HP.",
+ "tldr": [
+  "Spears and polearms give Warriors their longest basic reach, and Spearman has the highest physical EHP of the level 70 Warrior builds.",
+  "Polearm Mastery adds +20 Speed; the spear path gets no passive Speed, and there's no shield or party buff before third job.",
+  "Put the first second-job SP into Rush, then into Mastery to unlock Final Attack and Booster."
+ ],
  "hero": "421a52146b3201.png",
  "minutes": null,
  "blocks": [

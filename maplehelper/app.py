@@ -655,8 +655,12 @@ class MapleHelperApp:
     def show_wishlist(self):
         from .ui.wishlist import WishlistDialog
         keys = wishlist.items(self.settings, self.profiles.active_id)
-        self.open_window(f"wishlist:{self.profiles.active_id}",
-                         lambda: WishlistDialog(keys, self.kb, self.settings["language"], self.style()))
+
+        def make():
+            dlg = WishlistDialog(keys, self.kb, self.settings["language"], self.style(), self.settings)
+            dlg.price_dropped.connect(lambda title, body: self.toast(title, body, timeout_ms=9000))
+            return dlg
+        self.open_window(f"wishlist:{self.profiles.active_id}", make)
 
     def show_patch_notes(self, entries: list[dict] | None = None):
         if entries is None:

@@ -1,6 +1,11 @@
 {
  "title": "MapleStory Classic: מדריך בילד ולבלינג ל-Bowman, לבל 1-30",
  "intro": "Bowmen מתאמנים אצל Athena Pierce ב-Henesys. הם יורים חיצים מטווח ארוך מאוד, שומרים על מובים הרחק מהפנים שלהם עם bow whack, ויש להם ה-Accuracy הכי גבוה במשחק.",
+ "tldr": [
+  "מתקדמים אצל Athena Pierce ב-Henesys בלבל 10 (בלי דרישת סטטים) ושמים כל AP ב-DEX, שמעלה גם נזק וגם Accuracy.",
+  "ל-Bowman יש את הטווח הכי ארוך במשחק, עם עוד עד 120 px מ-The Eye of Amazon, ו-Critical Shot נותן 20% Critical Rate.",
+  "לפני הג'וב השני יש מעט מובינג, החיצים הם הוצאה קבועה, ו-HP נמוך מעניש מיקום גרוע."
+ ],
  "blocks": [
   {
    "img": "5a35a9da0881a5.png",
