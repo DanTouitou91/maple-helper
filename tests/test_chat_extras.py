@@ -221,18 +221,77 @@ def test_follow_ups_sit_under_the_newest_answer_only(qapp, chat):
                        Answer(text="A potion", entities=["item/2000000"]), Answer(text="Done"))
     ask_and_wait(qapp, chat, "tell me about blue snails")
     first = chat._next_steps
-    assert chip_texts(first) == [EN("fu_where"), EN("fu_level"), EN("fu_drops")]
+    assert chip_texts(first) == [EN(k, name="Blue Snail") for k in ("fu_where", "fu_level", "fu_drops")]
     chat.set_tags(["item/2000000"])
-    first.flow.itemAt(2).widget().click()                      # "What does it drop?" about the snail
+    first.flow.itemAt(2).widget().click()                      # "What does Blue Snail drop?"
     assert wait(qapp, lambda: not chat.busy)
     qapp.processEvents()
-    assert chat.brain.asked[-1] == (EN("fu_drops"), ["monster/100101"])
+    assert chat.brain.asked[-1] == (EN("fu_drops", name="Blue Snail"), ["monster/100101"])
     assert chat.focus_keys == ["item/2000000"]                 # the player's own tag is back
     from maplehelper.ui.overlay import _alive
     assert not _alive(first) or first.isHidden()
-    assert chip_texts(chat._next_steps) == [EN("fu_who_drops"), EN("fu_buy")]
+    assert chip_texts(chat._next_steps) == [EN("fu_who_drops", name="Red Potion"), EN("fu_buy", name="Red Potion")]
     ask_and_wait(qapp, chat, "thanks")
     assert chat._next_steps is None                            # no cards, no follow-ups
+
+
+def test_a_follow_up_the_kb_answers_spends_no_ai(qapp, chat):
+    """"Where is Red Snail?" under a card is answered from the KB (instant answers on), though the card is tagged."""
+    from PySide6.QtWidgets import QLabel
+    chat.settings["instant_answers"] = True
+    chat.brain = Brain(Answer(text="A snail", entities=["monster/130101"]))
+    ask_and_wait(qapp, chat, "tell me about it")
+    chat._next_steps.flow.itemAt(0).widget().click()           # "Where is Red Snail?"
+    qapp.processEvents()
+    assert len(chat.brain.asked) == 1 and not chat.busy
+    texts = [lb.text() for lb in chat.feed.findChildren(QLabel)]
+    assert any("Henesys Hunting Ground I" in x for x in texts)
+    chat._next_steps.flow.itemAt(1).widget().click()           # "Is Red Snail good for my level?": the AI's
+    assert wait(qapp, lambda: not chat.busy)
+    assert chat.brain.asked[-1] == (EN("fu_level", name="Red Snail"), ["monster/130101"])
+
+
+def test_without_an_ai_the_chat_offers_what_works_without_one(qapp, chat):
+    pages, sections = [], []
+    chat.tools_page_requested.connect(pages.append)
+    chat.settings_section_requested.connect(sections.append)
+    chat.settings["no_ai"], chat.settings["instant_answers"] = True, True
+    chat.clear_feed()
+    chat.refresh_profile_chip()
+    assert not chat.profile_card.now_btn.isVisibleTo(chat)     # "What now?" is the AI's
+    # starters only the AI answers turn into their play-tools page
+    shown = [chat.starters.flow.itemAt(i).widget().text() for i in range(chat.starters.count())]
+    assert shown == [EN("open_in_tools", page=EN("tool_train")), EN("open_in_tools", page=EN("tool_quests"))]
+    chat.starters.flow.itemAt(1).widget().click()
+    assert pages == ["quests"]
+    # an instant answer: no "Ask Claude anyway"; follow-ups only the KB answers
+    ask_and_wait(qapp, chat, "Red Snail HP")
+    assert EN.p("quick_ask_ai", "claude") not in chip_texts(chat.feed)
+    assert chip_texts(chat._next_steps) == [EN("fu_where", name="Red Snail")]
+    # a question for the AI: connect one, or the play tools page that fits
+    chat.brain = Brain(Answer(error="no_ai"))
+    ask_and_wait(qapp, chat, "where should I train at level 20?")
+    assert chip_texts(chat._next_steps) == [EN("fix_connect_ai"), EN("open_in_tools", page=EN("tool_train"))]
+    chat._next_steps.flow.itemAt(0).widget().click()
+    assert sections == ["ai"]
+
+
+def test_reading_the_profile_without_an_ai_says_how_to_connect_one(qapp, chat, monkeypatch):
+    from maplehelper.ui import overlay as ov
+    shots, done = [], []
+    monkeypatch.setattr(chat, "_step_aside", lambda then: shots.append(then))
+    chat.sync_finished.connect(done.append)
+    chat.settings["no_ai"] = True
+    chat.sync_profile()
+    assert shots == [] and done == [False] and not getattr(chat, "_syncing", False)
+    texts = [lb.text() for lb in chat.feed.findChildren(ov.SystemLine)]
+    assert texts and EN("err_no_ai") in texts[-1] and chip_texts(chat._next_steps) == [EN("fix_connect_ai")]
+    # with an AI, a failed read says what went wrong the same way (not "Something went wrong")
+    chat.settings["no_ai"] = False
+    chat._sync_cid = chat.profiles.active_id
+    chat._on_sync_done(Answer(error="not_logged_in"))
+    assert EN.p("err_not_logged_in", "claude") in [lb.text() for lb in chat.feed.findChildren(ov.SystemLine)][-1]
+    assert chip_texts(chat._next_steps) == [EN("sign_in")] and done == [False, False]
 
 
 def test_open_in_play_tools(qapp, chat):

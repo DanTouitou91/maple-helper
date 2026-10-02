@@ -239,7 +239,7 @@ class LevelChart(QWidget):
             return QPointF(left + (t - t0) / (t1 - t0) * (right - left), bottom - (v - lo) / (hi - lo) * (bottom - top))
         for lv in range(lo, hi + 1, step):
             y = at(t0, lv).y()
-            p.setPen(QPen(color(c["stroke"]), 1))
+            p.setPen(QPen(color(c.get("grid", c["stroke"])), 1))
             p.drawLine(QPointF(left, y), QPointF(right, y))
             p.setPen(color(c["muted"]))
             p.drawText(QRectF(0, y - 8, left - 6, 16), Qt.AlignRight | Qt.AlignAbsolute | Qt.AlignVCenter, str(lv))
@@ -249,10 +249,11 @@ class LevelChart(QWidget):
         path = QPainterPath(at(*self.points[0]))
         for pt in self.points[1:]:
             path.lineTo(at(*pt))
-        p.setPen(QPen(QColor(theme.ORANGE), 2.2, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        # high contrast: the line in the accent, the strongest thing on the chart
+        p.setPen(QPen(QColor(c.get("accent", theme.ORANGE)), 2.2, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
         p.setBrush(Qt.NoBrush)
         p.drawPath(path)
-        p.setBrush(QColor(theme.ORANGE_DEEP))
+        p.setBrush(QColor(c.get("accent", theme.ORANGE_DEEP)))
         p.setPen(Qt.NoPen)
         p.drawEllipse(at(*self.points[-1]), 3.5, 3.5)            # where you are now
         p.end()
@@ -324,6 +325,8 @@ class ToolsDialog(GlassDialog):
     def refresh(self, name: str | None = None):
         """Redraw a page (or the current one) from the character and the KB."""
         name = name or PAGES[self.stack.currentIndex()]
+        for b in self.__dict__.get("_read_btns", []):
+            b.setVisible(not self.settings["no_ai"])          # the AI reads the screen: without one, typing is the way
         getattr(self, f"_fill_{name}", lambda: None)()
 
     def profile_changed(self):
@@ -334,14 +337,15 @@ class ToolsDialog(GlassDialog):
     def sync_done(self, ok: bool):
         """A screenshot read ended: an EXP reading waiting for it takes the profile as it is now."""
         self.setWindowOpacity(1.0)
+        failed = bool(self.meter.get("pending")) and not ok
         if self.meter.get("pending"):
             if ok:
                 self._meter_reading()
             else:
                 self.meter.pop("pending")
-                if "exp" in self.pages:        # a reading started in an earlier window: nothing to show it on
-                    self._set(self.exp_status, self.t("exp_failed"))
         self.refresh()
+        if failed and "exp" in self.pages:     # after the redraw (it shows the steps again); an earlier window's: none
+            self._set(self.exp_status, self.t("exp_failed"))
 
     def _read_screen(self):
         """The chat reads the game from a screenshot; this window steps aside so it isn't in the picture."""
@@ -415,6 +419,7 @@ class ToolsDialog(GlassDialog):
         read = QPushButton(self._p(t("my_stats_read")), objectName="Link")
         read.setCursor(Qt.PointingHandCursor)
         read.clicked.connect(self._read_screen)
+        self.__dict__.setdefault("_read_btns", []).append(read)
         sec.add_widget(read)
         return sec
 
@@ -866,7 +871,8 @@ class ToolsDialog(GlassDialog):
     def _need_hint(self, need: str) -> str:
         """Where a requirement comes from: the monsters that drop the item (links), or where the monster lives."""
         kind, name, _ = quests.need_parts(need)
-        colors = {"classic": "#2E9E5B", "msea": theme.P()["muted"]}        # the badges' colors (#TagGood, #Tag)
+        c = theme.P()
+        colors = {"classic": c.get("accent", "#2E9E5B"), "msea": c["muted"]}     # the badges' colors (#TagGood, #Tag)
         if kind == "monster":
             m = self._monster_named(name)
             return html.escape(self.t("q_found_in", map=m.maps[0][0])) if m and m.maps else ""
@@ -876,7 +882,7 @@ class ToolsDialog(GlassDialog):
             e = self.kb.get(mk) or {}
             lv = (e.get("props") or {}).get("Level")
             src = self.kb.badge_source(mk, key)
-            mobs.append(f"<a href='{mk}' style='color: {theme.ORANGE_DEEP}; text-decoration: none;'>"
+            mobs.append(f"<a href='{mk}' style='color: {c.get('accent', theme.ORANGE_DEEP)}; text-decoration: none;'>"
                         f"{html.escape(e.get('name', mk))}</a>" + (f" Lv. {lv}" if lv else "")
                         + (f" <span style='color: {colors[src]};'>({html.escape(self.t('drop_' + src))})</span>" if src else ""))
         if not mobs:
@@ -1314,6 +1320,12 @@ class ToolsDialog(GlassDialog):
                 h, rest = divmod(int(v), 3600)
                 cell.setText(f"{h}:{rest // 60:02d}")
         self.exp_measure.setEnabled(bool(m.get("start")))
+        no_ai = bool(self.settings["no_ai"])
+        self.exp_start.setVisible(not no_ai)          # the meter reads the screen through the AI
+        self.exp_measure.setVisible(not no_ai)
+        if no_ai:
+            self._set(self.exp_status, t("exp_no_ai"))
+            return
         if self.meter.get("pending"):
             return
         if m.get("start") and not r:
@@ -1409,7 +1421,7 @@ class ToolsDialog(GlassDialog):
         elif per_hour:
             self._set(self.prog_forecast, t("prog_no_table"))
         else:
-            self._set(self.prog_forecast, t("prog_no_pace"))
+            self._set(self.prog_forecast, t("prog_no_pace_no_ai" if self.settings["no_ai"] else "prog_no_pace"))
         for g in sorted(c.goals, key=lambda g: (bool(g.get("done")), g.get("level", 0))):
             self.goal_list.addWidget(self._level_goal_card(g, per_hour))
         for key in wishlist.items(self.settings, c.id):

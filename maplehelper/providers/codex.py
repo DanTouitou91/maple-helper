@@ -196,6 +196,7 @@ class Codex(Provider):
     name = "codex"
     label = "ChatGPT"     # what players know it as (it runs through the Codex CLI)
     keyring_user = "openai_api_key"
+    key_prefix = "sk-"
     model_setting = "codex_model"
     reports_usage = True      # read on demand from the app-server (codex exec doesn't report it)
 

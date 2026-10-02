@@ -42,6 +42,7 @@ PALETTES = {
         "fill1": "#FFFFFF", "fill2": "#FFFFFF", "fill3": "#E6E6E6",
         "pressed": "#CCCCCC", "stroke": "#000000", "hair": "#000000",
         "scroll": "#000000", "focus": "#0040C0", "accent": "#7A3300", "danger": "#A00000",
+        "grid": "#B3B3B3",          # a chart's grid stays under its data line
     },
 }
 MODE = "dark"

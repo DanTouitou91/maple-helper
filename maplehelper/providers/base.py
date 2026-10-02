@@ -149,6 +149,7 @@ class Provider:
     name = ""
     label = ""
     keyring_user = ""
+    key_prefix = ""          # how its API keys start (the key field's hint)
     model_setting = ""       # settings key holding this provider's model (None = the CLI's default)
     saver_model = None       # lighter model for saver mode; None = keep the model, answers just get shorter
     reports_usage = False    # the CLI reports the player's plan usage (drives the usage meter)

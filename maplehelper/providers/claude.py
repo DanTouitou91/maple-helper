@@ -65,6 +65,7 @@ class Claude(Provider):
     name = "claude"
     label = "Claude"
     keyring_user = "anthropic_api_key"
+    key_prefix = "sk-ant-"
     model_setting = "model"
     saver_model = usage.SAVER_MODEL
     reports_usage = True

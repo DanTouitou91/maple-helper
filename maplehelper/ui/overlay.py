@@ -171,6 +171,7 @@ class Overlay(QWidget):
         self._delta_text = ""
         self._delta_timer = QTimer(self, singleShot=True, interval=60, timeout=self._render_delta)
         self._stopping = False                         # the player stopped the answer; waiting for it to end
+        self._closing = False                          # fading out: a quick second F9 opens it again
         self.bubble = MiniBubble()
         self.bubble.clicked.connect(self.restore_from_bubble)
         self.bubble.moved.connect(lambda pt: self.settings.__setitem__("bubble_pos", {"x": pt.x(), "y": pt.y()}))
@@ -440,6 +441,8 @@ class Overlay(QWidget):
         self.profile_card.setVisible(c is not None)
         if c:
             self.profile_card.show_character(c, self.profiles.avatar_path(c), self.kb, self.t.rtl)
+        # "What now?" asks the AI about the screenshot: without one it could only say "connect an AI"
+        self.profile_card.now_btn.setVisible(not self.settings["no_ai"])
         self.refresh_plan()
         self.refresh_pins()
         self._refresh_starters()
@@ -693,6 +696,7 @@ class Overlay(QWidget):
             self.stats = SessionStats()
             self.stats.touch(self.profiles.active)
             self._show_last_session()
+        self._closing = False
         self.setWindowOpacity(0.0)
         self.show()
         self.raise_()
@@ -723,7 +727,10 @@ class Overlay(QWidget):
         if not self.isVisible():
             return
         self.closed.emit()
+        self._closing = True
+
         def done():
+            self._closing = False
             self.hide()
             self.setWindowOpacity(1.0)
         self._materialize(False, done)
@@ -748,9 +755,13 @@ class Overlay(QWidget):
         hwnd = osapi.find_game_window()
         self.open_overlay(self._shoot(hwnd) if self.shot_provider else None, hwnd)
 
+    def is_open(self) -> bool:
+        """On screen and staying there: not fading out (the window is still visible for those 150 ms)."""
+        return self.isVisible() and not self._closing and self.windowOpacity() > 0.5
+
     def toggle(self, shot_provider):
         self.shot_provider = shot_provider
-        if self.isVisible() and self.windowOpacity() > 0.5:
+        if self.is_open():
             self.close_overlay()
         else:
             self.bubble.hide()
@@ -781,7 +792,8 @@ class Overlay(QWidget):
         elif self.shot and not self.shot_used:
             text = self.t("shot_hint_ready")
         else:
-            text = self.t("shot_hint_used") + f" <a href='shot:now' style='color:{theme.ORANGE_DEEP}; " \
+            link = theme.P().get("accent", theme.ORANGE_DEEP)          # high contrast: its darker accent
+            text = self.t("shot_hint_used") + f" <a href='shot:now' style='color:{link}; " \
                                                f"text-decoration:none;'><b>{self.t('shot_hint_retake')}</b></a>"
         import re
         text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
@@ -854,9 +866,18 @@ class Overlay(QWidget):
             self.starters.hide()
             return
         self.starters.set_title(self.t("sug_title"), self.t.rtl)
+        pages = []
         for q in suggest.starters(self.kb, self.profiles.active, self.t):
+            if self.settings["no_ai"] and not quick.answer(q, self.kb, self.t):
+                # only the AI answers this one: its play-tools page does without ("Where should I train?")
+                page = suggest.tools_page(q)
+                if page and page not in pages:
+                    pages.append(page)
+                    self.starters.add(self.t("open_in_tools", page=self.t(f"tool_{page}")),
+                                      lambda p=page: self.tools_page_requested.emit(p), "NowChip", self.t.rtl)
+                continue
             self.starters.add(q, lambda q=q: self.ask(q), "NowChip", self.t.rtl)
-        self.starters.show()
+        self.starters.setVisible(bool(self.starters.count()))
 
     def _drop_next_steps(self):
         if self._next_steps is not None and _alive(self._next_steps):
@@ -876,24 +897,28 @@ class Overlay(QWidget):
                   "settings": lambda: self.settings_section_requested.emit("ai"),
                   "saver": self.saver_requested.emit}[action]
             chips.add(t.p(label, self.settings["provider"]), do, "NowChip", rtl)
-        else:
+        if not fix or fix[0] == "fix_connect_ai":          # without an AI, the play tools are the way on
             page = suggest.tools_page(question, entities)
             if page:
                 chips.add(t("open_in_tools", page=t(f"tool_{page}")), lambda: self.tools_page_requested.emit(page),
                           "NowChip", rtl)
-            fu = suggest.follow_ups(entities, groups)
-            for k in fu[1] if fu else []:
-                if k != "fu_level" or self.profiles.active:
-                    chips.add(t(k), lambda q=t(k), key=fu[0]: self._ask_tagged(q, [key]), "SubChip", rtl)
+        fu = None if fix else suggest.follow_ups(entities, groups)
+        for k in fu[1] if fu else []:
+            if k == "fu_level" and not self.profiles.active:
+                continue
+            q = t(k, name=self.kb.get(fu[0])["name"])     # the card named in the question: the KB may answer it
+            if self.settings["no_ai"] and not quick.answer(q, self.kb, t):
+                continue                                   # only the AI answers this one
+            chips.add(q, lambda q=q, key=fu[0]: self._ask_tagged(q, [key], quick_first=True), "SubChip", rtl)
         if chips.count():
             self._add_widget(chips)
             self._next_steps = chips
 
-    def _ask_tagged(self, question: str, keys: list[str], again: bool = False):
+    def _ask_tagged(self, question: str, keys: list[str], again: bool = False, quick_first: bool = False):
         """Ask about these cards (the tagging the player does by tapping a card), then put their own tags back."""
         before = list(self.focus_keys)
         self.set_tags(keys)
-        self.ask(question, force_claude=again)
+        self.ask(question, force_claude=again, quick_first=quick_first)
         self.set_tags(before)
 
     MAX_TAGS = 5
@@ -997,8 +1022,9 @@ class Overlay(QWidget):
         if q and self.ask(q):
             self.input.clear()
 
-    def ask(self, question: str, force_claude: bool = False) -> bool:
-        """Ask (instant answer or Claude). False when nothing was asked (busy, empty)."""
+    def ask(self, question: str, force_claude: bool = False, quick_first: bool = False) -> bool:
+        """Ask (instant answer or Claude). False when nothing was asked (busy, empty).
+        quick_first: an instant answer even with cards tagged (a follow-up chip names its card in the question)."""
         if self.busy or getattr(self, "_syncing", False) or not question.strip():
             return False
         self._last_question = question
@@ -1013,7 +1039,7 @@ class Overlay(QWidget):
             self.add_bubble(question, "user", focus_name)
             if self.stats:
                 self.stats.question(c)     # once per question, however it gets answered
-            if not focus and self.settings["instant_answers"]:
+            if (quick_first or not focus) and self.settings["instant_answers"]:
                 qa = quick.answer(question, self.kb, self.t)
                 if qa:
                     if history:
@@ -1105,11 +1131,12 @@ class Overlay(QWidget):
         rl.setContentsMargins(4, 0, 4, 0)
         rl.setSpacing(8)
         rl.addWidget(QLabel(bidi.plain(self.t("quick_badge"), self.t.rtl), objectName="SystemLine"))
-        again = QPushButton(bidi.plain(self.t.p("quick_ask_ai", self.settings["provider"]), self.t.rtl),
-                            objectName="Link")
-        again.setCursor(Qt.PointingHandCursor)
-        again.clicked.connect(lambda: again.setEnabled(not self.ask(question, force_claude=True)))
-        rl.addWidget(again)
+        if not self.settings["no_ai"]:          # no AI to ask anyway
+            again = QPushButton(bidi.plain(self.t.p("quick_ask_ai", self.settings["provider"]), self.t.rtl),
+                                objectName="Link")
+            again.setCursor(Qt.PointingHandCursor)
+            again.clicked.connect(lambda: again.setEnabled(not self.ask(question, force_claude=True)))
+            rl.addWidget(again)
         rl.addStretch(1)
         self._add_widget(row)
         if history:
@@ -1186,6 +1213,10 @@ class Overlay(QWidget):
     def sync_profile(self):
         if getattr(self, "_syncing", False):
             return              # the read already running answers this request too
+        if self.settings["no_ai"]:
+            self._sync_error("no_ai")            # the AI reads the screen: no screenshot for nothing
+            self.sync_finished.emit(False)
+            return
         if self.busy:
             self.sync_finished.emit(False)       # mid-answer: say so, or an EXP reading waits for it forever
             return
@@ -1213,11 +1244,18 @@ class Overlay(QWidget):
         self.brain.begin()
         self._sync_thread.start()
 
+    def _sync_error(self, code: str):
+        """A screenshot read that failed: what to do, with its one-tap fix (the refresh button is the retry)."""
+        key, fix = error_view(code, self.settings["saver_mode"])
+        self.add_system(self.t.p(key, self.settings["provider"]))
+        if fix and fix[1] != "retry":
+            self._add_next_steps("", [], fix=fix)
+
     def _on_sync_done(self, ans: Answer):
         self._syncing = False
         self.profile_card.set_busy(False)
         if ans.error:
-            self.add_system(self.t("err_generic"))
+            self._sync_error(ans.error)
             self.sync_finished.emit(False)
             return
         if self.profiles.active_id != getattr(self, "_sync_cid", None):

@@ -282,3 +282,56 @@ def test_connect_ai_in_the_chat_opens_the_connect_page_without_an_ai():
                               open_window=lambda *a, **k: calls.append("settings"))
     app_mod.MapleHelperApp.open_settings(a, "ai")
     assert calls == ["connect"]
+
+
+def test_settings_left_open_while_the_chat_connects_never_signs_out(qapp, isolated_store, kb, asked, monkeypatch):
+    """Settings showed "Connect an AI…"; the chat's Connect AI connected meanwhile. Its button still connects,
+    and once the app has connected, the open window shows the account."""
+    from maplehelper import app as app_mod
+    from maplehelper import providers
+    from maplehelper.ui import dialogs
+    s = isolated_store.Settings()
+    s["language"], s["no_ai"] = "en", True
+    dlg = dialogs.SettingsDialog(s, isolated_store.Profiles(), kb, lambda *_: "")
+    signed_out = []
+    for p in providers.PROVIDERS.values():
+        monkeypatch.setattr(p, "logout", lambda n=p.name: signed_out.append(n))
+        monkeypatch.setattr(p, "delete_api_key", lambda n=p.name: signed_out.append(n))
+    opened = []
+    monkeypatch.setattr(dialogs.Onboarding, "exec", lambda self: opened.append(self.only_ai) or False)
+    s["no_ai"] = False                          # connected from the chat; this window still says "Connect an AI…"
+    dlg.switch_btn.click()
+    pump(qapp)
+    assert opened == [True] and signed_out == []
+
+    def connect(self):
+        self.settings["no_ai"] = False
+        return True
+    monkeypatch.setattr(app_mod, "Onboarding", type("O", (dialogs.Onboarding,), {"exec": connect}))
+    s["no_ai"] = True
+    dlg.sync_ai()
+    refreshed = []
+    a = types.SimpleNamespace(settings=s, profiles=None, kb=kb, style=lambda *_: "", _windows={"settings": dlg},
+                              bring_dialogs_forward=lambda: None, on_account_changed=lambda: refreshed.append("ai"),
+                              overlay=types.SimpleNamespace(refresh_profile_chip=lambda: refreshed.append("chat")))
+    app_mod.MapleHelperApp.connect_ai(a)
+    pump(qapp)
+    assert refreshed == ["ai", "chat"]
+    assert dlg.switch_btn.text() == "Switch account" and "No AI connected" not in dlg.account_label.text()
+    assert signed_out == []
+
+
+def test_a_provider_picked_on_a_cancelled_connect_page_does_not_stick(env):
+    from maplehelper.ui.dialogs import Onboarding
+    s, profiles, kb, _ = env
+    s["no_ai"] = True
+    dlg = Onboarding(s, profiles, kb, lambda *_: "", only_ai=True)
+    dlg._on_provider("codex")
+    assert s["provider"] == "codex"
+    dlg.reject()                                # closed without connecting
+    assert s["provider"] == "claude"
+    dlg = Onboarding(s, profiles, kb, lambda *_: "", only_ai=True)
+    dlg._on_provider("codex")
+    dlg._on_status("codex", "ok")
+    dlg._go_next()
+    assert s["provider"] == "codex" and not s["no_ai"]

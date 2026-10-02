@@ -23,6 +23,20 @@ def tools(isolated_store, kb):
     d.close()
 
 
+@pytest.fixture
+def drop_kb_tools(isolated_store, kb_copy):
+    from PySide6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    from test_info_progress import QUEST, _page
+
+    from maplehelper.kb import KnowledgeBase
+    _page(kb_copy, "quest/2000", "Estelle's Special Sauce", {"Minimum Level": 15, "EXP Reward": 705,
+                                                              "NPC": "Estelle", "Area": "Henesys"}, QUEST)
+    profiles = isolated_store.Profiles()
+    profiles.add("Kiwi", "Warrior", "Warrior", 16)
+    return KnowledgeBase(kb_copy), profiles
+
+
 def settle(app, ms):
     end = time.monotonic() + ms / 1000
     while time.monotonic() < end:
@@ -64,10 +78,40 @@ def test_picker_rows_are_built_once_per_kb(kb):
 
 
 def test_a_failed_read_ends_the_exp_meter_wait(tools):
+    from maplehelper.ui.tools import PAGES
     app, d, profiles, _ = tools
+    d.show_page(PAGES.index("exp"))
     d.meter["pending"] = ("start", profiles.active.id)
     d.sync_done(False)
     assert "pending" not in d.meter
+    assert "read the game. Make sure" in d.exp_status.text()       # not overwritten by the redraw's idle steps
+
+
+def test_without_an_ai_the_screen_reading_buttons_step_aside(tools):
+    from maplehelper.ui.tools import PAGES
+    app, d, profiles, _ = tools
+    d.settings["no_ai"] = True
+    for name in ("exp", "progress", "calc"):
+        d.show_page(PAGES.index(name))
+    assert d.exp_start.isHidden() and d.exp_measure.isHidden() and "takes an AI" in d.exp_status.text()
+    assert "with an AI connected" in d.prog_forecast.text()
+    reads = [b for b in d.findChildren(type(d.exp_start)) if b.text() == d._p(d.t("my_stats_read"))]
+    assert reads and all(b.isHidden() for b in reads)
+    d.settings["no_ai"] = False                                  # connected meanwhile: the meter is back
+    d.show_page(PAGES.index("exp"))
+    assert not d.exp_start.isHidden() and "takes an AI" not in d.exp_status.text()
+
+
+def test_marking_a_quest_done_takes_it_off_my_quests(isolated_store, drop_kb_tools):
+    from maplehelper.ui.tools import ToolsDialog
+    kb, profiles = drop_kb_tools
+    profiles.track_quest("Estelle's Special Sauce")
+    profiles.tick_quest("Estelle's Special Sauce", "Pig's Head x 10", True)
+    d = ToolsDialog(kb, profiles, isolated_store.Settings(), "en", "", {}, "quests")
+    d._quest_done("quest/2000")
+    c = profiles.active
+    assert c.quests_done == ["quest/2000"] and c.active_quests == [] and c.quest_ticks == {}
+    d.close()
 
 
 def test_history_search_waits_for_the_typing_to_pause(tools):

@@ -420,3 +420,49 @@ def test_no_badges_while_nothing_is_confirmed(drop_kb):
     pairs = [(m, i) for i, ms in kb.droppers.items() for m in ms]
     assert pairs and not kb.confirms_drops
     assert all(kb.drop_source(m, i) == "msea" and kb.badge_source(m, i) is None for m, i in pairs)
+
+
+def _contrast(a: str, b: str = "#FFFFFF") -> float:
+    def lum(c):
+        lin = [v / 255 / 12.92 if v / 255 <= 0.04045 else ((v / 255 + 0.055) / 1.055) ** 2.4
+               for v in (int(c.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4))]
+        return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2]
+    hi, lo = sorted((lum(a), lum(b)), reverse=True)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def test_colors_drawn_in_code_follow_high_contrast(qt_app, isolated_store, drop_kb, monkeypatch):
+    """Links, the "✓ Classic" note, the guides' links and the progress chart read at 4.5:1 or more on white."""
+    import re
+
+    from PySide6.QtCore import QPoint
+    from PySide6.QtGui import QColor, QImage, QRegion
+    from PySide6.QtWidgets import QWidget
+
+    from maplehelper import guides
+    from maplehelper.ui import theme
+    from maplehelper.ui.tools import LevelChart, ToolsDialog
+    monkeypatch.setattr(theme, "MODE", "contrast")
+    profiles = isolated_store.Profiles()
+    profiles.add("Kiwi", "Warrior", "Warrior", 16)
+    d = ToolsDialog(KnowledgeBase(drop_kb), profiles, isolated_store.Settings(), "en", "", {}, "quests")
+    hint = d._need_hint("Red Potion x 3")
+    d.close()
+    colors = re.findall(r"color: (#[0-9A-Fa-f]{6})", hint)
+    assert "Classic" in hint and len(colors) == 2
+    assert all(_contrast(c) >= 4.5 for c in colors), colors
+
+    page = guides.book_html({"lang": "en", "blocks": [{"guide": "guide/x", "text": "More"}]}, "contrast")
+    link = re.search(r"color: (#[0-9A-Fa-f]{6})", page)[1]
+    assert _contrast(link) >= 4.5 and _contrast(link, guides.NOTE_COLORS["contrast"]["note"]) >= 4.5
+
+    chart = LevelChart()
+    chart.resize(300, 170)
+    chart.set_points([(0, 10.0), (3600, 10.5), (7200, 11.2)])
+    img = QImage(chart.size(), QImage.Format_RGB32)
+    img.fill(QColor("#FFFFFF"))
+    chart.render(img, QPoint(), QRegion(), QWidget.RenderFlag.DrawChildren)        # on white, as the page shows it
+    seen = {QColor(img.pixel(x, y)).name() for x in range(300) for y in range(170)}
+    accent, grid = theme.P()["accent"], theme.P()["grid"]
+    assert accent.lower() in seen and theme.ORANGE.lower() not in seen
+    assert _contrast(accent) >= 4.5 and _contrast(grid) < _contrast(accent)     # the line is the strongest thing

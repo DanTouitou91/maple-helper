@@ -16,6 +16,7 @@ import html
 import re
 
 LRE, PDF, RLM = "‪", "‬", "‏"  # left-to-right embedding, pop, right-to-left mark
+RLE = "\u202b"                         # right-to-left embedding
 RTL_CHARS = "֐-׿؀-ۿיִ-﷿ﹰ-﻿"
 _STRONG = re.compile(rf"[A-Za-z{RTL_CHARS}]")
 _RTL = re.compile(rf"[{RTL_CHARS}]")
@@ -130,6 +131,14 @@ def to_html(text: str) -> str:
         line = re.sub(r"^\s*[-*•]\s+", "• ", line)
         parts.append(paragraph_html(line, paragraph_direction(line, msg_dir)))
     return "".join(parts)
+
+
+def in_ltr_field(text: str) -> str:
+    """A Hebrew hint inside a left-to-right field (the API key's placeholder): one right-to-left embedding, so
+    the field's own direction doesn't scramble it. Parts the caller already put in LRE…PDF stay whole (a key
+    prefix such as "sk-ant-": as a plain run its last hyphen would jump to the Hebrew side)."""
+    parts = re.split(f"({LRE}[^{PDF}]*{PDF})", text)
+    return RLE + "".join(p if p.startswith(LRE) else isolate_ltr_runs(p) for p in parts) + PDF
 
 
 def plain(text: str, rtl_ui: bool = False) -> str:

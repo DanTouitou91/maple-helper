@@ -233,3 +233,18 @@ def test_a_quick_double_toggle_keeps_the_window_size(qapp, overlay):
     assert overlay.settings["window"]["w"] == 640     # ...and what is saved is the real size
     assert wait(qapp, lambda: overlay._target_geometry is None)
     assert overlay.geometry() == QRect(100, 100, 640, 700)
+
+
+def test_f9_twice_quickly_opens_the_chat_again(qapp, overlay):
+    """The second F9 lands while the chat fades out (still visible): it opens it again, as a toggle should."""
+    from maplehelper import app as app_mod
+    a = types.SimpleNamespace(overlay=overlay, capture=lambda hwnd: None)
+    overlay.toggle(a.capture)
+    assert wait(qapp, lambda: overlay.windowOpacity() >= overlay.full_opacity() - 0.01)
+    app_mod.MapleHelperApp.on_hotkey(a, app_mod.HOTKEY_TOGGLE)
+    assert overlay.isVisible() and not overlay.is_open()      # fading out
+    app_mod.MapleHelperApp.on_hotkey(a, app_mod.HOTKEY_TOGGLE)
+    wait(qapp, lambda: False, 0.5)
+    assert overlay.isVisible() and overlay.is_open() and overlay.windowOpacity() > 0.5
+    app_mod.MapleHelperApp.on_hotkey(a, app_mod.HOTKEY_TOGGLE)
+    assert wait(qapp, lambda: not overlay.isVisible())        # one F9 still closes it

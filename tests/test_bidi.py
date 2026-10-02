@@ -131,3 +131,28 @@ def test_line_inside_hebrew_message(line, checks):
     x = glyph_x(shown)
     for a, b in checks:
         assert x[shown.index(a)] < x[shown.index(b)], f"{a!r} should be left of {b!r} in {line!r}"
+
+
+@pytest.mark.parametrize("prefix", ["sk-ant-", "sk-"])
+def test_api_key_hint_keeps_the_key_prefix_whole_in_the_left_to_right_field(prefix):
+    """The key field is left-to-right; the Hebrew hint's "sk-ant-" showed as "-sk-ant" (its hyphen jumped)."""
+    from maplehelper.i18n import I18n
+    hint = bidi.in_ltr_field(I18n("he").p("ob_api_key_hint", None, prefix=bidi.LRE + prefix + bidi.PDF))
+    for direction in (Qt.LeftToRight, Qt.RightToLeft):
+        lay = QTextLayout(hint, QFont("Arial", 20))
+        opt = QTextOption()
+        opt.setTextDirection(direction)
+        lay.setTextOption(opt)
+        lay.beginLayout()
+        lay.createLine().setLineWidth(3000)
+        lay.endLayout()
+        x = {}
+        flags = (QTextLayout.GlyphRunRetrievalFlag.RetrieveGlyphPositions
+                 | QTextLayout.GlyphRunRetrievalFlag.RetrieveStringIndexes)
+        for run in lay.glyphRuns(0, len(hint), flags):
+            for p, si in zip(run.positions(), run.stringIndexes()):
+                x.setdefault(si, p.x())
+        start = hint.index(prefix)
+        last_dash, bet = start + len(prefix) - 1, hint.index("ב-" + bidi.LRE)
+        assert x[start] < x[last_dash] < x[bet], (direction, prefix)      # "sk-ant-" then "-ב", reading right to left
+        assert x[hint.index("API")] < x[hint.index("הדביקו")]

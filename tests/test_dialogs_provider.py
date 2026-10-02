@@ -81,3 +81,18 @@ def test_settings_model_pick_applies_right_away(env):
     assert dlg.model_pick.text() == "Sonnet (recommended)" and "Sonnet 5" in dlg.model_hint.text()
     dlg._on_model(dlg._model_values.index("opus"))
     assert s["model"] == "opus" and seen == ["opus"]
+
+
+def test_settings_on_an_api_key_shows_the_cost_not_the_plan_usage(env):
+    """A pay-per-use key has no plan to meter: "Shown after your next question to Claude" never comes."""
+    from PySide6.QtWidgets import QLabel
+
+    from maplehelper.ui.dialogs import SettingsDialog
+    s, profiles, kb = env
+    dlg = SettingsDialog(s, profiles, kb, lambda *_: "")
+    assert dlg.usage_meter.isVisibleTo(dlg) and dlg.usage_sec.header.text() == "CLAUDE PLAN USAGE"
+    s.set_api_key_mode("claude", True)
+    dlg = SettingsDialog(s, profiles, kb, lambda *_: "")
+    assert not dlg.usage_meter.isVisibleTo(dlg) and not dlg.usage_note.isVisibleTo(dlg)
+    assert dlg.usage_sec.header.text() == "SAVER" and dlg.saver.isVisibleTo(dlg)
+    assert any(lb.text().startswith("This month: $") for lb in dlg.usage_sec.findChildren(QLabel))

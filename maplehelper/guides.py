@@ -224,7 +224,8 @@ def title(key: str, fallback: str, lang: str) -> str:
 IMAGES = TRANSLATIONS / "img"
 _ICON = re.compile(r"\[\[img:([\w.-]+)\]\]")
 NOTE_COLORS = {"light": {"note": "#FFF4E6", "head": "#F2F2F7", "line": "#E5E5EA", "link": "#F07A12"},
-               "dark": {"note": "#3A2C1E", "head": "#2C2C2E", "line": "#3A3A3C", "link": "#FF9F43"}}
+               "dark": {"note": "#3A2C1E", "head": "#2C2C2E", "line": "#3A3A3C", "link": "#FF9F43"},
+               "contrast": {"note": "#FFF4E6", "head": "#E6E6E6", "line": "#000000", "link": "#7A3300"}}
 
 
 def _load(path) -> dict | None:

@@ -225,7 +225,7 @@ class MapleHelperApp:
 
     def on_hotkey(self, hotkey_id: int):
         if hotkey_id == HOTKEY_TOGGLE:
-            if self.overlay.isVisible():
+            if self.overlay.is_open():                # a second F9 while it fades out opens it again
                 self.overlay.close_overlay()
             else:
                 self.overlay.toggle(self.capture)   # also restores from the minimized bubble
@@ -378,6 +378,10 @@ class MapleHelperApp:
         self.bring_dialogs_forward()
         if Onboarding(self.settings, self.profiles, self.kb, self.style, only_ai=True).exec():
             self.on_account_changed()
+            self.overlay.refresh_profile_chip()           # "What now?" and the starters for an AI
+            settings_win = self.__dict__.get("_windows", {}).get("settings")
+            if settings_win is not None:
+                settings_win.sync_ai()                    # an open Settings still showed "No AI connected"
 
     def on_account_changed(self):
         # another provider or account: a warm process started under the old one is replaced

@@ -200,6 +200,7 @@ class Onboarding(GlassDialog):
         self._bridge.status.connect(self._on_status)
         self._bridge.key_checked.connect(self._on_key_checked)
         self.provider = providers.get(settings["provider"]).name
+        self._provider_at_open = settings["provider"]
         self._ai_ok = False
         self._build()
 
@@ -352,7 +353,12 @@ class Onboarding(GlassDialog):
         self.install_btn.setText(t.p("ob_install", p))
         self.login_btn.setText(t.p("ob_login", p))
         self.key_edit.clear()
-        self.key_edit.setPlaceholderText(t.p("ob_api_key_hint", p))
+        prefix = self._ai().key_prefix
+        if t.rtl:         # the key field is left-to-right: one right-to-left hint, "sk-ant-" kept whole
+            hint = bidi.in_ltr_field(t.p("ob_api_key_hint", p, prefix=bidi.LRE + prefix + bidi.PDF))
+        else:
+            hint = t.p("ob_api_key_hint", p, prefix=prefix)
+        self.key_edit.setPlaceholderText(hint)
         self._label_privacy()
 
     def _label_privacy(self):
@@ -549,6 +555,11 @@ class Onboarding(GlassDialog):
         self.stack.setCurrentIndex(self.stack.currentIndex() + 1)
         self._update_nav()
 
+    def done(self, r):
+        if not r:              # closed without finishing: a provider picked on the connect page doesn't stick
+            self.settings["provider"] = self._provider_at_open
+        super().done(r)
+
     def restart_on_language(self):
         """After a language restart, open straight on the step after the language."""
         if not self.only_character and self.stack.count() > 1:
@@ -683,6 +694,7 @@ class SettingsDialog(GlassDialog):
         self._account_bridge.account.connect(self._on_account)
         self._account_bridge.logged_out.connect(self._start_login)
         self._account_status = None
+        self._offers_connect = False         # the button says "Connect an AI…" (what a click on it does)
         self._login_timer = QTimer(self, interval=3000)
         self._login_timer.timeout.connect(self._login_tick)
         self._refresh_account()
@@ -797,14 +809,15 @@ class SettingsDialog(GlassDialog):
     def _label_usage(self):
         """The meter shows the plan of the AI that answers now (Claude's or ChatGPT's); saver mode is there for both."""
         t, ai = self.t, self._ai()
-        self.usage_sec.set_header(t.p("sec_usage", ai.name) if ai.reports_usage else t("sec_saver"))
+        plan = ai.reports_usage and not self.settings.api_key_mode(ai.name)    # an API key has no plan: its cost shows
+        self.usage_sec.set_header(t.p("sec_usage", ai.name) if plan else t("sec_saver"))
         self._show_usage(ai.name)
-        self.usage_meter.setVisible(ai.reports_usage)
+        self.usage_meter.setVisible(plan)
         self.usage_note.setText(bidi.plain(t.p("usage_note", ai.name), t.rtl))
-        self.usage_note.setVisible(ai.reports_usage)
+        self.usage_note.setVisible(plan)
         self.saver_hint.setText(bidi.plain(t.p("saver_hint", ai.name), t.rtl))
         self.usage_sec.setVisible(not self.settings["no_ai"])
-        if ai.reports_usage and not self.settings.api_key_mode(ai.name) and not self.settings["no_ai"]:
+        if plan and not self.settings["no_ai"]:
             threading.Thread(target=lambda: self._limits_bridge.account.emit(
                 {"provider": ai.name, "limits": ai.read_limits()}), daemon=True).start()
 
@@ -890,23 +903,31 @@ class SettingsDialog(GlassDialog):
 
     def _refresh_account(self):
         if self.settings["no_ai"]:          # skipped in onboarding: its CLI stays untouched until connected
+            self._offers_connect = True
             self._set_account_text(self.t("ai_none"))
             self.switch_btn.setText(self.t("ai_connect"))
             self.switch_btn.show()
             return
+        if self._offers_connect:            # connected meanwhile: no button until the check says what it does now
+            self._offers_connect = False
+            self.switch_btn.hide()
+            self._set_account_text(self.t("ob_checking"))
         ai = self._ai()
         threading.Thread(target=lambda: self._account_bridge.account.emit({**ai.account(), "provider": ai.name}),
                          daemon=True).start()
 
     def _connect_ai(self):
         """The onboarding's connect page (install, sign in or an API key), for a player who skipped it."""
-        if not Onboarding(self.settings, self.profiles, self.kb, self.stylesheet_fn, only_ai=True).exec():
-            return
+        if Onboarding(self.settings, self.profiles, self.kb, self.stylesheet_fn, only_ai=True).exec():
+            self.account_changed.emit()       # the app's AI leaves the no-AI state
+        self.sync_ai()
+
+    def sync_ai(self):
+        """Show the AI as it is now: after the connect page, or connected from the chat while this window was open."""
         for b in self.provider_pick.group.buttons():             # the provider may have changed there
             b.setChecked(b.property("value") == self._ai().name)
         self._fill_models()
         self._label_usage()
-        self.account_changed.emit()       # the app's AI leaves the no-AI state
         self._refresh_account()
 
     def _show_privacy(self):
@@ -951,7 +972,7 @@ class SettingsDialog(GlassDialog):
 
     def _switch_account(self):
         """Sign out, then run the official sign-in so another account can be chosen in the browser."""
-        if self.settings["no_ai"]:
+        if self._offers_connect:            # what the button says, not the live setting: never a surprise sign-out
             self._connect_ai()
             return
         self.switch_btn.setEnabled(False)
