@@ -672,6 +672,7 @@ class SettingsDialog(GlassDialog):
         track_slider(self.opacity, rtl)
         sec.add_row(t("chat_opacity"), self.opacity)
         self.click_through = Switch(settings["click_through"])
+        self._through_at_open = bool(settings["click_through"])
         sec.add_row(t("click_through"), self.click_through, hint=t("click_through_hint"))
         lay.addWidget(sec)
         self._scroll, self._ai_row = scroll, self.provider_pick     # show_section("ai") scrolls to it
@@ -940,7 +941,9 @@ class SettingsDialog(GlassDialog):
             "answer_length": self.length.value(),
             "start_with_windows": self.autostart.isChecked(),
             "chat_opacity": self.opacity.value(),
-            "click_through": self.click_through.isChecked(),
+            # untouched here: keep the live value (F9 may have turned it off while Settings was open)
+            "click_through": (self.click_through.isChecked() if self.click_through.isChecked() != self._through_at_open
+                              else self.settings["click_through"]),
         })
         s.save()
         self.changed.emit()

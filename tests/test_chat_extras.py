@@ -368,6 +368,11 @@ def test_settings_show_the_month_and_save_the_window_prefs(qapp, isolated_store,
     dlg._save()
     assert (s["chat_opacity"], s["click_through"]) == (75, True)
 
+    dlg = SettingsDialog(s, isolated_store.Profiles(), kb, lambda *_: "")    # opened with click-through on
+    s["click_through"] = False                                               # then F9 turned it off
+    dlg._save()
+    assert s["click_through"] is False                                       # an untouched switch keeps that
+
 
 def test_opacity_and_click_through(qapp, chat):
     from PySide6.QtCore import Qt
